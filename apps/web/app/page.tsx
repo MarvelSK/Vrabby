@@ -7,6 +7,7 @@ import {useGlobalSettings} from "@/contexts/GlobalSettingsContext";
 import Image from "next/image";
 import {Image as ImageIcon} from "lucide-react";
 import {MotionDiv} from "@/lib/motion";
+import AuthMenu from "@/components/AuthMenu";
 
 
 // Ensure fetch is available
@@ -682,32 +683,8 @@ export default function HomePage() {
                                 </ul>
                             </nav>
 
-                            {/* Right: Buttons (Bolt.new style) */}
-                            <div className="items-center gap-3 hidden lg:flex">
-                                {/* Sign in */}
-                                <button
-                                    type="button"
-                                    className="flex items-center justify-center font-medium shrink-0 rounded-md text-xs px-3 h-8
-    bg-black/[0.05] dark:bg-white/[0.05]
-    text-gray-900 dark:text-gray-100
-    hover:bg-black/[0.08] dark:hover:bg-white/[0.1]
-    transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4285F4]/50"
-                                >
-                                    Sign in
-                                </button>
-
-                                {/* Get started */}
-                                <button
-                                    type="button"
-                                    className="flex items-center justify-center font-medium shrink-0 rounded-md text-xs px-3 h-8
-    text-white bg-[#4285F4]
-    hover:bg-[#3a75d8] active:bg-[#356acc]
-    transition-colors duration-200 shadow-sm
-    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4285F4]/50"
-                                >
-                                    Get started
-                                </button>
-                            </div>
+                            {/* Right: Auth */}
+                            <AuthMenu />
 
                         </div>
                     </div>
