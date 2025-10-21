@@ -142,9 +142,9 @@ class CodexCLI(BaseCLI):
             raise RuntimeError("Codex CLI not available. Install with `npm install -g @openai/codex` and ensure it is on PATH.")
 
         # Ensure AGENTS.md exists in project repo with system prompt (essential)
-        # If needed, set CLAUDABLE_DISABLE_AGENTS_MD=1 to skip.
+        # If needed, set Vrabby_DISABLE_AGENTS_MD=1 to skip.
         try:
-            if str(os.getenv("CLAUDABLE_DISABLE_AGENTS_MD", "")).lower() in (
+            if str(os.getenv("Vrabby_DISABLE_AGENTS_MD", "")).lower() in (
                 "1",
                 "true",
                 "yes",
@@ -204,7 +204,7 @@ class CodexCLI(BaseCLI):
 
         # Optionally resume from a previous rollout. Disabled by default to avoid
         # stale system prompts or behaviors leaking between runs.
-        enable_resume = str(os.getenv("CLAUDABLE_CODEX_RESUME", "")).lower() in (
+        enable_resume = str(os.getenv("Vrabby_CODEX_RESUME", "")).lower() in (
             "1",
             "true",
             "yes",

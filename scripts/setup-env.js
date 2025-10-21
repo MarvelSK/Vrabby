@@ -169,4 +169,19 @@ if (require.main === module) {
   setupEnvironment().catch(console.error);
 }
 
+const { execSync } = require('child_process');
+function freePort(port) {
+    try {
+        const output = execSync(`netstat -ano | findstr :${port}`).toString();
+        const pid = output.match(/\d+$/m)?.[0];
+        if (pid) {
+            console.log(`🧹 Killing process on port ${port} (PID ${pid})`);
+            execSync(`taskkill /PID ${pid} /F`);
+        }
+    } catch (_) {}
+}
+freePort(8080);
+freePort(3000);
+
+
 module.exports = { setupEnvironment, findAvailablePort };

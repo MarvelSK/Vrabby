@@ -7,10 +7,10 @@ import Header from '@/components/Header'
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Claudable',
-  description: 'Claudable Application',
+  title: 'Vrabby',
+  description: 'Vrabby AI Builder',
   icons: {
-    icon: '/Claudable_Icon.png',
+    icon: '/Vrabby_Icon.png',
   },
 }
 

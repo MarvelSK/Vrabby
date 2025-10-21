@@ -93,11 +93,11 @@ class TerminalUI:
         self.console.print(panel)
     
     def ascii_logo(self):
-        """Display ASCII art logo for Claudable"""
-        # Create "CLAUDABLE" logo with orange color from the image
+        """Display ASCII art logo for Vrabby"""
+        # Create "Vrabby" logo with orange color from the image
         logo_text = Text()
         
-        # CLAUDABLE ASCII art
+        # Vrabby ASCII art
         logo_text.append(" ██████╗██╗      █████╗ ██╗   ██╗██████╗  █████╗ ██████╗ ██╗     ███████╗\n", style="rgb(182,109,77)")
         logo_text.append("██╔════╝██║     ██╔══██╗██║   ██║██╔══██╗██╔══██╗██╔══██╗██║     ██╔════╝\n", style="rgb(182,109,77)")
         logo_text.append("██║     ██║     ███████║██║   ██║██║  ██║███████║██████╔╝██║     █████╗  \n", style="rgb(182,109,77)")

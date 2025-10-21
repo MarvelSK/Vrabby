@@ -35,13 +35,13 @@ const CLI_OPTIONS: CLIOption[] = [
     icon: '',
     description: 'Anthropic Claude with advanced reasoning',
     color: 'from-orange-500 to-red-600',
-    brandColor: '#DE7356',
+    brandColor: '#4285F4',
     downloadUrl: 'https://docs.anthropic.com/en/docs/claude-code/overview',
     installCommand: 'npm install -g @anthropic-ai/claude-code',
     enabled: true,
     models: [
       { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5' },
-      { id: 'claude-opus-4.1', name: 'Claude Opus 4.1' },
+      { id: 'claude-haiku-3.5', name: 'Claude Haiku 3.5' },
     ]
   },
   {
@@ -50,7 +50,7 @@ const CLI_OPTIONS: CLIOption[] = [
     icon: '',
     description: 'AI-powered code editor with frontier models',
     color: 'from-gray-500 to-gray-600',
-    brandColor: '#6B7280',
+    brandColor: '#4285F4',
     downloadUrl: 'https://cursor.com/cli',
     installCommand: '# See official guide: https://cursor.com/cli',
     enabled: true,
@@ -65,7 +65,7 @@ const CLI_OPTIONS: CLIOption[] = [
     icon: '/qwen.png',
     description: 'Alibaba Qwen Coder',
     color: 'from-purple-500 to-pink-500',
-    brandColor: '#A855F7',
+    brandColor: '#4285F4',
     downloadUrl: 'https://github.com/QwenLM/qwen-code',
     installCommand: 'npm install -g @qwen-code/qwen-code@latest',
     enabled: true,
@@ -94,7 +94,7 @@ const CLI_OPTIONS: CLIOption[] = [
     icon: '/oai.png',
     description: 'OpenAI Codex with GPT-5 integration',
     color: 'from-gray-900 to-black',
-    brandColor: '#000000',
+    brandColor: '#4285F4',
     downloadUrl: 'https://developers.openai.com/codex/cli/',
     installCommand: 'npm install -g @openai/codex',
     enabled: true,
@@ -364,7 +364,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                 </span>
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Global Settings</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Configure your Claudable preferences</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Configure your preferences</p>
                 </div>
               </div>
               <button
@@ -698,23 +698,32 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
             {activeTab === 'about' && (
               <div className="space-y-6">
                 <div className="text-center">
-                  <div className="w-20 h-20 mx-auto mb-4 relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-[#DE7356]/20 to-[#DE7356]/5 blur-xl rounded-2xl" />
+                  <div className="w-40 h-20 mx-auto mb-4 relative">
+                    <div className="absolute inset-0 rounded-2xl" />
                     <img 
-                      src="/Claudable_Icon.png" 
-                      alt="Claudable Icon" 
-                      className="relative z-10 w-full h-full object-contain rounded-2xl shadow-lg"
+                      src="/Vrabby_logo.svg"
+                      alt="Vrabby Icon" 
+                      className="relative z-10 w-full h-full object-contain rounded-2xl"
                     />
                   </div>
-                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Claudable</h3>
-                  <p className="text-gray-600 dark:text-gray-400 mt-2 font-medium">Version 1.0.0</p>
+                    {(() => {
+                        const year = new Date().getFullYear().toString().slice(-1); // "5"
+                        const month = (new Date().getMonth() + 1).toString().padStart(2, "0"); // "10"
+                        const patch = 3; // manually change this when you push new update
+                        const version = `${year}.${month}.${patch}`;
+                        return (
+                            <p className="text-gray-600 dark:text-gray-400 mt-2 font-medium">
+                                Version {version}
+                            </p>
+                        );
+                    })()}
+
                 </div>
                 
                 <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
                   <div className="text-center">
                     <p className="text-base text-gray-700 dark:text-gray-300 leading-relaxed max-w-2xl mx-auto">
-                      Claudable is an AI-powered development platform that integrates with GitHub, Supabase, and Vercel 
-                      to streamline your web development workflow.
+                        Vrabby is an AI-powered development platform that integrates with GitHub, Supabase, and Vercel to streamline your entire web development workflow.
                     </p>
                   </div>
                   
@@ -725,7 +734,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                         </svg>
                       </div>
-                      <p className="text-xs font-medium text-gray-700 dark:text-white/80">Fast Deploy</p>
+                      <p className="text-xs font-medium text-gray-700 dark:text-white/80">Instant Deploy</p>
                     </div>
                     <div className="p-3 rounded-xl border border-gray-200/50 dark:border-white/5 bg-transparent">
                       <div className="flex items-center justify-center mb-2">
@@ -733,7 +742,7 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                         </svg>
                       </div>
-                      <p className="text-xs font-medium text-gray-700 dark:text-white/80">AI Powered</p>
+                      <p className="text-xs font-medium text-gray-700 dark:text-white/80">Powered by Vrabby Agent</p>
                     </div>
                   </div>
                 </div>
@@ -741,20 +750,12 @@ export default function GlobalSettings({ isOpen, onClose, initialTab = 'general'
                 <div className="text-center">
                   <div className="flex justify-center gap-6">
                     <a 
-                      href="https://github.com/opactorai/Claudable" 
+                      href="https://discord.gg/APukX5dU3D"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm text-[#DE7356] hover:text-[#c95940] transition-colors"
                     >
-                      GitHub
-                    </a>
-                    <a 
-                      href="https://discord.gg/NJNbafHNQC" 
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-[#DE7356] hover:text-[#c95940] transition-colors"
-                    >
-                      Discord
+                      Join our Discord community
                     </a>
                   </div>
                 </div>
