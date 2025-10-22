@@ -16,12 +16,10 @@
     "setup": "npm install",
     "clean": "node scripts/clean.js",
     "db:reset": "node scripts/reset-db.js",
-    "db:backup": "node scripts/backup-db.js",
-    "audit:report": "npm audit --json > audit.json",
-    "audit:fix": "npm audit fix"
+    "db:backup": "node scripts/backup-db.js"
   },
   "devDependencies": {
-    "concurrently": "^9.0.1",
+    "concurrently": "^8.2.2",
     "dotenv": "^16.4.5"
   },
   "engines": {
