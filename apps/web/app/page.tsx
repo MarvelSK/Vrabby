@@ -8,6 +8,8 @@ import Image from "next/image";
 import {Image as ImageIcon} from "lucide-react";
 import {MotionDiv} from "@/lib/motion";
 import AuthMenu from "@/components/AuthMenu";
+import supabase from "@/lib/supabaseClient";
+import Link from "next/link";
 
 
 // Ensure fetch is available
@@ -260,10 +262,22 @@ export default function HomePage() {
             .slice(0, 2)
             .toUpperCase();
 
+    // Auth helper: returns Authorization header for Supabase session if available
+    async function getAuthHeaders() {
+        try {
+            const {data} = await supabase.auth.getSession();
+            const token = data.session?.access_token;
+            return token ? {Authorization: `Bearer ${token}`} : {};
+        } catch (e) {
+            return {};
+        }
+    }
+
     // Data
     async function load() {
         try {
-            const r = await fetchAPI(`${API_BASE}/api/projects`);
+            const headers = await getAuthHeaders();
+            const r = await fetchAPI(`${API_BASE}/api/projects`, {headers});
             if (r.ok) {
                 const projectsData = await r.json();
                 const sortedProjects = projectsData.sort((a: Project, b: Project) => {
@@ -272,6 +286,9 @@ export default function HomePage() {
                     return new Date(bTime).getTime() - new Date(aTime).getTime();
                 });
                 setProjects(sortedProjects);
+            } else if (r.status === 401) {
+                // Not authenticated: show no projects
+                setProjects([]);
             }
         } catch (error) {
             console.error("Failed to load projects:", error);
@@ -296,8 +313,10 @@ export default function HomePage() {
         if (!deleteModal.project) return;
         setIsDeleting(true);
         try {
+            const headers = await getAuthHeaders();
             const response = await fetchAPI(`${API_BASE}/api/projects/${deleteModal.project.id}`, {
                 method: "DELETE",
+                headers,
             });
 
             if (response.ok) {
@@ -318,9 +337,10 @@ export default function HomePage() {
 
     async function updateProject(projectId: string, newName: string) {
         try {
+            const headers = await getAuthHeaders();
             const response = await fetchAPI(`${API_BASE}/api/projects/${projectId}`, {
                 method: "PUT",
-                headers: {"Content-Type": "application/json"},
+                headers: {"Content-Type": "application/json", ...headers},
                 body: JSON.stringify({name: newName}),
             });
             if (response.ok) {
@@ -412,9 +432,15 @@ export default function HomePage() {
         const projectId = `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
         try {
+            const headers = await getAuthHeaders();
+            if (!("Authorization" in headers)) {
+                showToast("Please sign in to create a project", "error");
+                setIsCreatingProject(false);
+                return;
+            }
             const response = await fetchAPI(`${API_BASE}/api/projects`, {
                 method: "POST",
-                headers: {"Content-Type": "application/json"},
+                headers: {"Content-Type": "application/json", ...headers},
                 body: JSON.stringify({
                     project_id: projectId,
                     name: prompt.slice(0, 50) + (prompt.length > 50 ? "..." : ""),
@@ -449,7 +475,7 @@ export default function HomePage() {
 
                         const uploadResponse = await fetchAPI(
                             `${API_BASE}/api/assets/${project.id}/upload`,
-                            {method: "POST", body: formData}
+                            {method: "POST", body: formData, headers}
                         );
                         if (uploadResponse.ok) {
                             const result = await uploadResponse.json();
@@ -475,7 +501,7 @@ export default function HomePage() {
                 try {
                     const actResponse = await fetchAPI(`${API_BASE}/api/chat/${project.id}/act`, {
                         method: "POST",
-                        headers: {"Content-Type": "application/json"},
+                        headers: {"Content-Type": "application/json", ...headers},
                         body: JSON.stringify({
                             instruction: prompt.trim(),
                             images: imageData,
@@ -657,34 +683,31 @@ export default function HomePage() {
                                 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden lg:block">
                                 <ul className="flex gap-6 text-sm text-gray-500 dark:text-gray-400">
                                     <li>
-                                        <a href="https://discord.gg/APukX5dU3D"
+                                        <a href="https://discord.gg/APukX5dU3D" target="_blank" rel="noopener noreferrer"
                                            className="hover:text-black dark:hover:text-white transition font-medium">
                                             Community
                                         </a>
                                     </li>
                                     <li>
-                                        <a href="#blog"
-                                           className="hover:text-black dark:hover:text-white transition font-medium">
+                                        <Link href="/blog" className="hover:text-black dark:hover:text-white transition font-medium">
                                             Blog
-                                        </a>
+                                        </Link>
                                     </li>
                                     <li>
-                                        <a href="#faq"
-                                           className="hover:text-black dark:hover:text-white transition font-medium">
+                                        <Link href="/faq" className="hover:text-black dark:hover:text-white transition font-medium">
                                             FAQ
-                                        </a>
+                                        </Link>
                                     </li>
                                     <li>
-                                        <a href="#pricing"
-                                           className="hover:text-black dark:hover:text-white transition font-medium">
+                                        <Link href="/pricing" className="hover:text-black dark:hover:text-white transition font-medium">
                                             Pricing
-                                        </a>
+                                        </Link>
                                     </li>
                                 </ul>
                             </nav>
 
                             {/* Right: Auth */}
-                            <AuthMenu />
+                            <AuthMenu/>
 
                         </div>
                     </div>
@@ -1274,9 +1297,9 @@ export default function HomePage() {
                 {deleteModal.isOpen && deleteModal.project && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
                         <MotionDiv
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.9 }}
+                            initial={{opacity: 0, scale: 0.9}}
+                            animate={{opacity: 1, scale: 1}}
+                            exit={{opacity: 0, scale: 0.9}}
                             className="w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-900 text-white shadow-2xl p-5 relative"
                         >
                             {/* Close button (X) */}

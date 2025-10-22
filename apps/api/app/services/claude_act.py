@@ -1,12 +1,11 @@
 import os
-from typing import Tuple, Optional, Callable, Dict, List
-import json
 from datetime import datetime
 from pathlib import Path
+from typing import Tuple, Optional, Callable, Dict, List
 
 from claude_code_sdk import query, ClaudeCodeOptions
 from claude_code_sdk.types import (
-    Message, AssistantMessage, SystemMessage, ResultMessage,
+    AssistantMessage, ResultMessage,
     TextBlock, ThinkingBlock, ToolUseBlock, ToolResultBlock
 )
 
@@ -15,6 +14,7 @@ DEFAULT_MODEL = os.getenv("CLAUDE_CODE_MODEL", "claude-sonnet-4-5-20250929")
 
 # Cache for system prompt variants
 _PROMPT_CACHE: Dict[str, str] = {}
+
 
 # ==========================================================
 # 🧠 PROMPT MANAGEMENT (core / design / build)

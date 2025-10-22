@@ -2,28 +2,30 @@
 Act Execution API Endpoints
 Handles CLI execution and AI actions
 """
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from typing import List, Optional
-from datetime import datetime
-import uuid
-import asyncio
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-
 import os
+import uuid
+from datetime import datetime
+from typing import List, Optional
 
+from app.api.auth import get_current_user, CurrentUser
+from app.api.billing_utils import ensure_user_account, get_balance, adjust_credits
 from app.api.deps import get_db
 from app.core.config import settings
-from app.models.projects import Project
-from app.models.messages import Message
-from app.models.sessions import Session as ChatSession
-from app.models.commits import Commit
-from app.models.user_requests import UserRequest
-from app.services.cli.unified_manager import UnifiedCLIManager
-from app.services.cli.base import CLIType
-from app.services.git_ops import commit_all
-from app.core.websocket.manager import manager
 from app.core.terminal_ui import ui
+from app.core.websocket.manager import manager
+from app.models.commits import Commit
+from app.models.messages import Message
+from app.models.projects import Project
+from app.models.sessions import Session as ChatSession
+from app.models.user_requests import UserRequest
+from app.services.cli.base import CLIType
+from app.services.cli.unified_manager import UnifiedCLIManager
+from app.services.git_ops import commit_all
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+
 def build_project_info(project: Project, db: Session) -> dict:
     """Ensure project has a usable repo path and collect runtime info."""
     repo_path = project.repo_path
@@ -42,6 +44,7 @@ def build_project_info(project: Project, db: Session) -> dict:
 
     return {
         'id': project.id,
+        'owner_id': project.owner_id,
         'repo_path': repo_path,
         'preferred_cli': project.preferred_cli or "claude",
         'fallback_enabled': project.fallback_enabled if project.fallback_enabled is not None else True,
@@ -77,12 +80,12 @@ class ActResponse(BaseModel):
 
 
 def build_conversation_context(
-    project_id: str,
-    conversation_id: str | None,
-    db: Session,
-    *,
-    exclude_message_id: str | None = None,
-    limit: int = 20
+        project_id: str,
+        conversation_id: str | None,
+        db: Session,
+        *,
+        exclude_message_id: str | None = None,
+        limit: int = 20
 ) -> str:
     """Return a formatted snippet of recent chat history for context transfer."""
 
@@ -118,13 +121,13 @@ def build_conversation_context(
 
 
 async def execute_act_instruction(
-    project_id: str,
-    instruction: str,
-    session_id: str,
-    conversation_id: str,
-    images: List[ImageAttachment],
-    db: Session,
-    is_initial_prompt: bool = False
+        project_id: str,
+        instruction: str,
+        session_id: str,
+        conversation_id: str,
+        images: List[ImageAttachment],
+        db: Session,
+        is_initial_prompt: bool = False
 ):
     """Execute an ACT instruction - can be called from other modules"""
     try:
@@ -132,7 +135,7 @@ async def execute_act_instruction(
         project = db.query(Project).filter(Project.id == project_id).first()
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        
+
         # Get or create session
         session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
         if not session:
@@ -148,10 +151,10 @@ async def execute_act_instruction(
             )
             db.add(session)
             db.commit()
-        
+
         # Extract project info to avoid DetachedInstanceError in background task
         project_info = build_project_info(project, db)
-        
+
         # Execute the task
         return await execute_act_task(
             project_info=project_info,
@@ -168,18 +171,19 @@ async def execute_act_instruction(
         ui.error(f"Error in execute_act_instruction: {e}", "ACT")
         raise
 
+
 async def execute_chat_task(
-    project_info: dict,
-    session: ChatSession,
-    instruction: str,
-    conversation_id: str,
-    images: List[ImageAttachment],
-    db: Session,
-    cli_preference: CLIType = None,
-    fallback_enabled: bool = True,
-    is_initial_prompt: bool = False,
-    _request_id: str | None = None,
-    user_message_id: str | None = None
+        project_info: dict,
+        session: ChatSession,
+        instruction: str,
+        conversation_id: str,
+        images: List[ImageAttachment],
+        db: Session,
+        cli_preference: CLIType = None,
+        fallback_enabled: bool = True,
+        is_initial_prompt: bool = False,
+        _request_id: str | None = None,
+        user_message_id: str | None = None
 ):
     """Background task for executing Chat instructions"""
     try:
@@ -189,7 +193,7 @@ async def execute_chat_task(
         project_preferred_cli = project_info['preferred_cli']
         project_fallback_enabled = project_info['fallback_enabled']
         project_selected_model = project_info['selected_model']
-        
+
         # Use project's CLI preference if not explicitly provided
         if cli_preference is None:
             try:
@@ -197,13 +201,13 @@ async def execute_chat_task(
             except ValueError:
                 ui.warning(f"Unknown CLI type '{project_preferred_cli}', falling back to Claude", "CHAT")
                 cli_preference = CLIType.CLAUDE
-        
+
         ui.info(f"Using {cli_preference.value} with {project_selected_model or 'default model'}", "CHAT")
-        
+
         # Update session status to running
         session.status = "running"
         db.commit()
-        
+
         # Send chat_start event to trigger loading indicator
         await manager.broadcast_to_project(project_id, {
             "type": "chat_start",
@@ -212,7 +216,7 @@ async def execute_chat_task(
                 "instruction": instruction
             }
         })
-        
+
         # Initialize CLI manager
         cli_manager = UnifiedCLIManager(
             project_id=project_id,
@@ -221,7 +225,7 @@ async def execute_chat_task(
             conversation_id=conversation_id,
             db=db
         )
-        
+
         # Qwen Coder does not support images yet; drop them to prevent errors
         safe_images = [] if cli_preference == CLIType.QWEN else images
 
@@ -243,22 +247,37 @@ async def execute_chat_task(
                     f"{instruction}"
                 )
 
-        result = await cli_manager.execute_instruction(
-            instruction=instruction_payload,
-            cli_type=cli_preference,
-            fallback_enabled=project_fallback_enabled,
-            images=safe_images,
-            model=project_selected_model,
-            is_initial_prompt=is_initial_prompt
-        )
-        
-        
+        # Retry wrapper for robustness (CHAT)
+        import os as _os_chat, asyncio as _aio_chat
+        _retries = int(_os_chat.getenv('JOB_MAX_RETRIES', '2') or '2')
+        _delay = float(_os_chat.getenv('JOB_RETRY_DELAY_SEC', '2') or '2')
+        result = None
+        last_err = None
+        for attempt in range(_retries + 1):
+            try:
+                result = await cli_manager.execute_instruction(
+                    instruction=instruction_payload,
+                    cli_type=cli_preference,
+                    fallback_enabled=project_fallback_enabled,
+                    images=safe_images,
+                    model=project_selected_model,
+                    is_initial_prompt=is_initial_prompt
+                )
+                break
+            except Exception as e:
+                last_err = e
+                ui.warning(f"CHAT attempt {attempt + 1} failed: {e}", "CHAT")
+                if attempt < _retries:
+                    await _aio_chat.sleep(_delay)
+                else:
+                    raise
+
         # Handle result
         if result and result.get("success"):
             # For chat mode, we don't commit changes - just update session status
             session.status = "completed"
             session.completed_at = datetime.utcnow()
-            
+
         else:
             # Error message
             error_msg = Message(
@@ -276,11 +295,11 @@ async def execute_chat_task(
                 created_at=datetime.utcnow()
             )
             db.add(error_msg)
-            
+
             session.status = "failed"
             session.error = result.get("error") if result else "No CLI available"
             session.completed_at = datetime.utcnow()
-            
+
             # Send error message via WebSocket
             error_data = {
                 "id": error_msg.id,
@@ -297,9 +316,9 @@ async def execute_chat_task(
                 "data": error_data,
                 "timestamp": error_msg.created_at.isoformat()
             })
-        
+
         db.commit()
-        
+
         # Send chat_complete event to clear loading indicator and notify completion
         await manager.broadcast_to_project(project_id, {
             "type": "chat_complete",
@@ -308,15 +327,23 @@ async def execute_chat_task(
                 "session_id": session.id
             }
         })
-        
+
     except Exception as e:
         ui.error(f"Chat execution error: {e}", "CHAT")
-        
+
         # Save error
         session.status = "failed"
         session.error = str(e)
         session.completed_at = datetime.utcnow()
-        
+
+        # Refund one credit on failure
+        try:
+            owner_id = project_info.get('owner_id') if isinstance(project_info, dict) else None
+            if owner_id:
+                adjust_credits(db, owner_id, +1, "refund", "Chat failed")
+        except Exception:
+            pass
+
         error_msg = Message(
             id=str(uuid.uuid4()),
             project_id=project_id,
@@ -330,7 +357,7 @@ async def execute_chat_task(
         )
         db.add(error_msg)
         db.commit()
-        
+
         # Send chat_complete event even on failure to clear loading indicator
         await manager.broadcast_to_project(project_id, {
             "type": "chat_complete",
@@ -343,17 +370,17 @@ async def execute_chat_task(
 
 
 async def execute_act_task(
-    project_info: dict,
-    session: ChatSession,
-    instruction: str,
-    conversation_id: str,
-    images: List[ImageAttachment],
-    db: Session,
-    cli_preference: CLIType = None,
-    fallback_enabled: bool = True,
-    is_initial_prompt: bool = False,
-    request_id: str = None,
-    user_message_id: str | None = None
+        project_info: dict,
+        session: ChatSession,
+        instruction: str,
+        conversation_id: str,
+        images: List[ImageAttachment],
+        db: Session,
+        cli_preference: CLIType = None,
+        fallback_enabled: bool = True,
+        is_initial_prompt: bool = False,
+        request_id: str = None,
+        user_message_id: str | None = None
 ):
     """Background task for executing Act instructions"""
     try:
@@ -363,7 +390,7 @@ async def execute_act_task(
         project_preferred_cli = project_info['preferred_cli']
         project_fallback_enabled = project_info['fallback_enabled']
         project_selected_model = project_info['selected_model']
-        
+
         # Use project's CLI preference if not explicitly provided
         if cli_preference is None:
             try:
@@ -371,12 +398,12 @@ async def execute_act_task(
             except ValueError:
                 ui.warning(f"Unknown CLI type '{project_preferred_cli}', falling back to Claude", "ACT")
                 cli_preference = CLIType.CLAUDE
-        
+
         ui.info(f"Using {cli_preference.value} with {project_selected_model or 'default model'}", "ACT")
-        
+
         # Update session status to running
         session.status = "running"
-        
+
         # ★ NEW: Update UserRequest status to started
         if request_id:
             user_request = db.query(UserRequest).filter(UserRequest.id == request_id).first()
@@ -384,9 +411,9 @@ async def execute_act_task(
                 user_request.started_at = datetime.utcnow()
                 user_request.cli_type_used = cli_preference.value
                 user_request.model_used = project_selected_model
-        
+
         db.commit()
-        
+
         # Send act_start event to trigger loading indicator
         await manager.broadcast_to_project(project_id, {
             "type": "act_start",
@@ -396,7 +423,7 @@ async def execute_act_task(
                 "request_id": request_id
             }
         })
-        
+
         # Initialize CLI manager
         cli_manager = UnifiedCLIManager(
             project_id=project_id,
@@ -405,7 +432,7 @@ async def execute_act_task(
             conversation_id=conversation_id,
             db=db
         )
-        
+
         # Qwen Coder does not support images yet; drop them to prevent errors
         safe_images = [] if cli_preference == CLIType.QWEN else images
 
@@ -427,26 +454,41 @@ async def execute_act_task(
                     f"{instruction}"
                 )
 
-        result = await cli_manager.execute_instruction(
-            instruction=instruction_payload,
-            cli_type=cli_preference,
-            fallback_enabled=project_fallback_enabled,
-            images=safe_images,
-            model=project_selected_model,
-            is_initial_prompt=is_initial_prompt
-        )
-        
-        
+        # Retry wrapper for robustness (ACT)
+        import os as _os_act, asyncio as _aio_act
+        _retries_act = int(_os_act.getenv('JOB_MAX_RETRIES', '2') or '2')
+        _delay_act = float(_os_act.getenv('JOB_RETRY_DELAY_SEC', '2') or '2')
+        result = None
+        for attempt in range(_retries_act + 1):
+            try:
+                result = await cli_manager.execute_instruction(
+                    instruction=instruction_payload,
+                    cli_type=cli_preference,
+                    fallback_enabled=project_fallback_enabled,
+                    images=safe_images,
+                    model=project_selected_model,
+                    is_initial_prompt=is_initial_prompt
+                )
+                break
+            except Exception as e:
+                ui.warning(f"ACT attempt {attempt + 1} failed: {e}", "ACT")
+                if attempt < _retries_act:
+                    await _aio_act.sleep(_delay_act)
+                else:
+                    raise
+
         # Handle result
-        ui.info(f"Result received: success={result.get('success') if result else None}, cli={result.get('cli_used') if result else None}", "ACT")
-        
+        ui.info(
+            f"Result received: success={result.get('success') if result else None}, cli={result.get('cli_used') if result else None}",
+            "ACT")
+
         if result and result.get("success"):
             # Commit changes if any
             if result.get("has_changes"):
                 try:
                     commit_message = f"🤖 {result.get('cli_used', 'AI')}: {instruction[:100]}"
                     commit_result = commit_all(project_repo_path, commit_message)
-                    
+
                     if commit_result["success"]:
                         commit = Commit(
                             id=str(uuid.uuid4()),
@@ -458,7 +500,7 @@ async def execute_act_task(
                         )
                         db.add(commit)
                         db.commit()
-                        
+
                         await manager.send_message(project_id, {
                             "type": "commit",
                             "data": {
@@ -469,11 +511,11 @@ async def execute_act_task(
                         })
                 except Exception as e:
                     ui.warning(f"Commit failed: {e}", "ACT")
-            
+
             # Update session status only (no success message to user)
             session.status = "completed"
             session.completed_at = datetime.utcnow()
-            
+
             # ★ NEW: Mark UserRequest as completed successfully
             if request_id:
                 user_request = db.query(UserRequest).filter(UserRequest.id == request_id).first()
@@ -489,7 +531,7 @@ async def execute_act_task(
                     ui.success(f"UserRequest {request_id[:8]}... marked as completed", "ACT")
                 else:
                     ui.warning(f"UserRequest {request_id[:8]}... not found for completion", "ACT")
-            
+
         else:
             # Error message
             error_msg = Message(
@@ -507,11 +549,11 @@ async def execute_act_task(
                 created_at=datetime.utcnow()
             )
             db.add(error_msg)
-            
+
             session.status = "failed"
             session.error = result.get("error") if result else "No CLI available"
             session.completed_at = datetime.utcnow()
-            
+
             # ★ NEW: Mark UserRequest as completed with failure
             if request_id:
                 user_request = db.query(UserRequest).filter(UserRequest.id == request_id).first()
@@ -523,7 +565,7 @@ async def execute_act_task(
                     ui.warning(f"UserRequest {request_id[:8]}... marked as failed", "ACT")
                 else:
                     ui.warning(f"UserRequest {request_id[:8]}... not found for failure marking", "ACT")
-            
+
             # Send error message via WebSocket
             error_data = {
                 "id": error_msg.id,
@@ -540,15 +582,16 @@ async def execute_act_task(
                 "data": error_data,
                 "timestamp": error_msg.created_at.isoformat()
             })
-        
+
         try:
             db.commit()
-            ui.success(f"Database commit successful for request {request_id[:8] if request_id else 'unknown'}...", "ACT")
+            ui.success(f"Database commit successful for request {request_id[:8] if request_id else 'unknown'}...",
+                       "ACT")
         except Exception as commit_error:
             ui.error(f"Database commit failed: {commit_error}", "ACT")
             db.rollback()
             raise
-        
+
         # Send act_complete event to clear loading indicator and notify completion
         await manager.broadcast_to_project(project_id, {
             "type": "act_complete",
@@ -558,17 +601,17 @@ async def execute_act_task(
                 "request_id": request_id
             }
         })
-        
+
     except Exception as e:
         ui.error(f"Execution error: {e}", "ACT")
         import traceback
         ui.error(f"Traceback: {traceback.format_exc()}", "ACT")
-        
+
         # Save error
         session.status = "failed"
         session.error = str(e)
         session.completed_at = datetime.utcnow()
-        
+
         # ★ NEW: Mark UserRequest as failed due to exception
         if request_id:
             user_request = db.query(UserRequest).filter(UserRequest.id == request_id).first()
@@ -577,7 +620,15 @@ async def execute_act_task(
                 user_request.is_successful = False
                 user_request.completed_at = datetime.utcnow()
                 user_request.error_message = str(e)
-        
+
+        # Refund one credit on failure
+        try:
+            owner_id = project_info.get('owner_id') if isinstance(project_info, dict) else None
+            if owner_id:
+                adjust_credits(db, owner_id, +1, "refund", "Act failed")
+        except Exception as _:
+            pass
+
         error_msg = Message(
             id=str(uuid.uuid4()),
             project_id=project_id,
@@ -591,7 +642,7 @@ async def execute_act_task(
         )
         db.add(error_msg)
         db.commit()
-        
+
         # Send act_complete event even on failure to clear loading indicator
         await manager.broadcast_to_project(project_id, {
             "type": "act_complete",
@@ -606,51 +657,74 @@ async def execute_act_task(
 
 @router.post("/{project_id}/act", response_model=ActResponse)
 async def run_act(
-    project_id: str,
-    body: ActRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+        project_id: str,
+        body: ActRequest,
+        background_tasks: BackgroundTasks,
+        db: Session = Depends(get_db),
+        current_user: CurrentUser = Depends(get_current_user)
 ):
     """Execute instruction using unified CLI system"""
     ui.info(f"Starting execution: {body.instruction[:50]}...", "ACT")
     ui.info(f"Initial prompt flag: {body.is_initial_prompt}", "ACT")
-    
+
     project = db.get(Project, project_id)
-    if not project:
-        ui.error(f"Project {project_id} not found", "ACT API")
+    if not project or project.owner_id != current_user["id"]:
+        ui.error(f"Project {project_id} not found or access denied", "ACT API")
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
+    # Credits enforcement: token-based debit (approximate by instruction length)
+    try:
+        ensure_user_account(db, current_user["id"])  # ensure exists
+        approx_tokens = max(1, int(len(body.instruction or "") / 4))
+        tokens_per_credit = max(1, settings.tokens_per_credit)
+        # Ceiling division for debit units
+        debit = max(1, (approx_tokens + tokens_per_credit - 1) // tokens_per_credit)
+        if get_balance(db, current_user["id"]) < debit:
+            raise HTTPException(status_code=402, detail="Out of credits. Please subscribe or purchase credits.")
+        adjust_credits(
+            db,
+            current_user["id"],
+            -debit,
+            "spend",
+            f"Act request; approx_tokens={approx_tokens}; rate=1 credit/{tokens_per_credit} tokens",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        ui.error(f"Credit spend failed: {e}", "ACT API")
+        raise HTTPException(status_code=402, detail="Unable to spend credits")
+
     # Determine CLI preference
     cli_preference = CLIType(body.cli_preference or project.preferred_cli)
     fallback_enabled = body.fallback_enabled if body.fallback_enabled is not None else project.fallback_enabled
     conversation_id = body.conversation_id or str(uuid.uuid4())
-    
+
     # 🔍 DEBUG: Log incoming request data
     print(f"📥 ACT Request - Project: {project_id}")
     print(f"📥 Instruction: {body.instruction[:100]}...")
     print(f"📥 Images count: {len(body.images)}")
     print(f"📥 Images data: {body.images}")
     for i, img in enumerate(body.images):
-        print(f"📥 Image {i+1}: {img}")
+        print(f"📥 Image {i + 1}: {img}")
         if hasattr(img, '__dict__'):
-            print(f"📥 Image {i+1} dict: {img.__dict__}")
-    
+            print(f"📥 Image {i + 1} dict: {img.__dict__}")
+
     # Extract image paths and build attachments for metadata/WS
     image_paths = []
     attachments = []
     import os as _os
-    
+
     print(f"🔍 Processing {len(body.images)} images...")
     for i, img in enumerate(body.images):
-        print(f"🔍 Processing image {i+1}: {img}")
-        
+        print(f"🔍 Processing image {i + 1}: {img}")
+
         img_dict = img if isinstance(img, dict) else img.__dict__ if hasattr(img, '__dict__') else {}
-        print(f"🔍 Image {i+1} converted to dict: {img_dict}")
-        
+        print(f"🔍 Image {i + 1} converted to dict: {img_dict}")
+
         p = img_dict.get('path')
         n = img_dict.get('name')
-        print(f"🔍 Image {i+1} - path: {p}, name: {n}")
-        
+        print(f"🔍 Image {i + 1} - path: {p}, name: {n}")
+
         if p:
             print(f"🔍 Adding path to image_paths: {p}")
             image_paths.append(p)
@@ -674,17 +748,17 @@ async def run_act(
             print(f"🔍 Adding name to image_paths: {n}")
             image_paths.append(n)
         else:
-            print(f"❌ Image {i+1} has neither path nor name!")
-    
+            print(f"❌ Image {i + 1} has neither path nor name!")
+
     print(f"🔍 Final image_paths: {image_paths}")
     print(f"🔍 Final attachments: {attachments}")
-    
+
     # Save user instruction as message (with image paths in content for display)
     message_content = body.instruction
     if image_paths:
-        image_refs = [f"Image #{i+1} path: {path}" for i, path in enumerate(image_paths)]
+        image_refs = [f"Image #{i + 1} path: {path}" for i, path in enumerate(image_paths)]
         message_content = f"{body.instruction}\n\n{chr(10).join(image_refs)}"
-    
+
     user_message = Message(
         id=str(uuid.uuid4()),
         project_id=project_id,
@@ -703,7 +777,7 @@ async def run_act(
         created_at=datetime.utcnow()
     )
     db.add(user_message)
-    
+
     # Create session
     session = ChatSession(
         id=str(uuid.uuid4()),
@@ -714,7 +788,7 @@ async def run_act(
         started_at=datetime.utcnow()
     )
     db.add(session)
-    
+
     # ★ NEW: Create UserRequest for tracking
     request_id = str(uuid.uuid4())
     user_request = UserRequest(
@@ -727,13 +801,13 @@ async def run_act(
         created_at=datetime.utcnow()
     )
     db.add(user_request)
-    
+
     try:
         db.commit()
     except Exception as e:
         ui.error(f"Database commit failed: {e}", "ACT API")
         raise
-    
+
     # Send initial messages
     try:
         await manager.send_message(project_id, {
@@ -754,10 +828,10 @@ async def run_act(
         })
     except Exception as e:
         ui.error(f"WebSocket failed: {e}", "ACT API")
-    
+
     # Extract project info to avoid DetachedInstanceError in background task
     project_info = build_project_info(project, db)
-    
+
     # Add background task
     background_tasks.add_task(
         execute_act_task,
@@ -783,24 +857,46 @@ async def run_act(
 
 @router.post("/{project_id}/chat", response_model=ActResponse)
 async def run_chat(
-    project_id: str,
-    body: ActRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+        project_id: str,
+        body: ActRequest,
+        background_tasks: BackgroundTasks,
+        db: Session = Depends(get_db),
+        current_user: CurrentUser = Depends(get_current_user)
 ):
     """Execute chat instruction using unified CLI system (same as act but different event type)"""
     ui.info(f"Starting chat: {body.instruction[:50]}...", "CHAT")
-    
+
     project = db.get(Project, project_id)
-    if not project:
-        ui.error(f"Project {project_id} not found", "CHAT API")
+    if not project or project.owner_id != current_user["id"]:
+        ui.error(f"Project {project_id} not found or access denied", "CHAT API")
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
+    # Credits enforcement: token-based debit (approximate by instruction length)
+    try:
+        ensure_user_account(db, current_user["id"])  # ensure exists
+        approx_tokens = max(1, int(len(body.instruction or "") / 4))
+        tokens_per_credit = max(1, settings.tokens_per_credit)
+        debit = max(1, (approx_tokens + tokens_per_credit - 1) // tokens_per_credit)
+        if get_balance(db, current_user["id"]) < debit:
+            raise HTTPException(status_code=402, detail="Out of credits. Please subscribe or purchase credits.")
+        adjust_credits(
+            db,
+            current_user["id"],
+            -debit,
+            "spend",
+            f"Chat request; approx_tokens={approx_tokens}; rate=1 credit/{tokens_per_credit} tokens",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        ui.error(f"Credit spend failed: {e}", "CHAT API")
+        raise HTTPException(status_code=402, detail="Unable to spend credits")
+
     # Determine CLI preference
     cli_preference = CLIType(body.cli_preference or project.preferred_cli)
     fallback_enabled = body.fallback_enabled if body.fallback_enabled is not None else project.fallback_enabled
     conversation_id = body.conversation_id or str(uuid.uuid4())
-    
+
     # Extract image paths and build attachments for metadata/WS
     image_paths = []
     attachments = []
@@ -829,13 +925,13 @@ async def run_chat(
                 pass
         elif n:
             image_paths.append(n)
-    
+
     # Save user instruction as message (with image paths in content for display)
     message_content = body.instruction
     if image_paths:
-        image_refs = [f"Image #{i+1} path: {path}" for i, path in enumerate(image_paths)]
+        image_refs = [f"Image #{i + 1} path: {path}" for i, path in enumerate(image_paths)]
         message_content = f"{body.instruction}\n\n{chr(10).join(image_refs)}"
-    
+
     user_message = Message(
         id=str(uuid.uuid4()),
         project_id=project_id,
@@ -854,7 +950,7 @@ async def run_chat(
         created_at=datetime.utcnow()
     )
     db.add(user_message)
-    
+
     # Create session
     session = ChatSession(
         id=str(uuid.uuid4()),
@@ -865,13 +961,13 @@ async def run_chat(
         started_at=datetime.utcnow()
     )
     db.add(session)
-    
+
     try:
         db.commit()
     except Exception as e:
         ui.error(f"Database commit failed: {e}", "CHAT API")
         raise
-    
+
     # Send initial messages
     try:
         await manager.send_message(project_id, {
@@ -891,10 +987,10 @@ async def run_chat(
         })
     except Exception as e:
         ui.error(f"WebSocket failed: {e}", "CHAT API")
-    
+
     # Extract project info (with validated repo_path) to avoid DetachedInstanceError
     project_info = build_project_info(project, db)
-    
+
     # Add background task for chat (same as act but with different event type)
     background_tasks.add_task(
         execute_chat_task,
@@ -910,7 +1006,7 @@ async def run_chat(
         None,
         user_message.id
     )
-    
+
     return ActResponse(
         session_id=session.id,
         conversation_id=conversation_id,

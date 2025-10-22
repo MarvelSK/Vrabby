@@ -1,6 +1,4 @@
 import subprocess
-from typing import List, Optional
-import os
 
 
 def _run(cmd: list[str], cwd: str) -> str:
@@ -50,18 +48,18 @@ def add_remote(repo_path: str, remote_name: str, remote_url: str) -> None:
     try:
         # Check if remote already exists
         existing_url = _run(["git", "remote", "get-url", remote_name], cwd=repo_path)
-        
+
         # Compare URLs without authentication credentials for proper comparison
         def normalize_url(url):
             # Remove credentials from URL for comparison
             import re
             return re.sub(r'https://[^@]+@github.com/', 'https://github.com/', url)
-        
+
         if normalize_url(existing_url) != normalize_url(remote_url):
             # Different repository - remove existing remote and add new one
             _run(["git", "remote", "remove", remote_name], cwd=repo_path)
             _run(["git", "remote", "add", remote_name, remote_url], cwd=repo_path)
-            
+
             # Unset any existing upstream to avoid conflicts
             try:
                 _run(["git", "branch", "--unset-upstream"], cwd=repo_path)
@@ -85,7 +83,7 @@ def push_to_remote(repo_path: str, remote_name: str = "origin", branch: str = "m
             # If push fails (e.g., different histories), try force push
             # This is safe for initial connection to a new empty repo
             result = _run(["git", "push", "-u", "--force", remote_name, branch], cwd=repo_path)
-            
+
         return {
             "success": True,
             "output": result,
@@ -137,7 +135,7 @@ def initialize_main_branch(repo_path: str) -> None:
         except subprocess.CalledProcessError:
             # Nothing to commit, create empty commit
             _run(["git", "commit", "--allow-empty", "-m", "Initial commit"], cwd=repo_path)
-    
+
     # Ensure we're on main branch
     try:
         current_branch = get_current_branch(repo_path)

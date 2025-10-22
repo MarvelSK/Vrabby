@@ -2,26 +2,27 @@
 WebSocket Connection Manager
 Handles WebSocket connections for real-time chat updates
 """
-from typing import Dict, List
 import json
-from fastapi import WebSocket
+from typing import Dict, List
+
 from app.core.terminal_ui import ui
+from fastapi import WebSocket
 
 
 class ConnectionManager:
     """WebSocket connection manager for real-time updates"""
-    
+
     def __init__(self):
         self.active_connections: Dict[str, List[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, project_id: str):
         """Connect a new WebSocket client"""
         await websocket.accept()
-        
+
         # Initialize connection list if needed
         if project_id not in self.active_connections:
             self.active_connections[project_id] = []
-        
+
         # Add new connection to the list (allow multiple connections per project)
         self.active_connections[project_id].append(websocket)
 
@@ -32,7 +33,7 @@ class ConnectionManager:
                 self.active_connections[project_id].remove(websocket)
             except ValueError:
                 pass
-            
+
             if not self.active_connections[project_id]:
                 del self.active_connections[project_id]
 

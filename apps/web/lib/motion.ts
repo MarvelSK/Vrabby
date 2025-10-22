@@ -1,4 +1,4 @@
-import { motion, type MotionProps } from 'framer-motion'
+import {motion, type MotionProps} from 'framer-motion'
 
 // Define types for different HTML elements with motion props
 type MotionDivProps = MotionProps & React.HTMLAttributes<HTMLDivElement>

@@ -8,8 +8,8 @@ Implementations live in:
 - Manager: app/services/cli/manager.py
 """
 
-from .base import BaseCLI, CLIType, MODEL_MAPPING, get_project_root, get_display_path
 from .adapters import ClaudeCodeCLI, CursorAgentCLI, CodexCLI, QwenCLI, GeminiCLI
+from .base import BaseCLI, CLIType, MODEL_MAPPING, get_project_root, get_display_path
 from .manager import UnifiedCLIManager
 
 __all__ = [

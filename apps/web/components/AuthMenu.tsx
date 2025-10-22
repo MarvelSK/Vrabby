@@ -1,6 +1,16 @@
 "use client";
 import { useEffect, useState } from "react";
 import supabase from "@/lib/supabaseClient";
+import CreditsBar from "@/components/CreditsBar";
+import Link from "next/link";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
+
+type CreditsResponse = {
+  credit_balance: number;
+  period_limit?: number | null;
+  plan?: string | null;
+};
 
 interface Profile {
   id: string;
@@ -13,6 +23,8 @@ export default function AuthMenu() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [credits, setCredits] = useState<CreditsResponse | null>(null);
+  const [loadingCredits, setLoadingCredits] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -22,7 +34,7 @@ export default function AuthMenu() {
       const user = data.session?.user;
       if (!mounted) return;
       if (user) {
-        setProfile({
+        const newProfile: Profile = {
           id: user.id,
           email: user.email ?? undefined,
           name: (user.user_metadata?.name as string) || (user.user_metadata?.full_name as string) || undefined,
@@ -30,7 +42,21 @@ export default function AuthMenu() {
             (user.user_metadata?.avatar_url as string) ||
             (user.user_metadata?.picture as string) ||
             undefined,
-        });
+        };
+        setProfile(newProfile);
+        // Notify backend of login event and snapshot profile
+        try {
+          if (API_BASE) {
+            const token = (await supabase.auth.getSession()).data.session?.access_token;
+            if (token) {
+              await fetch(`${API_BASE}/api/users/events`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ event: 'login', email: newProfile.email, name: newProfile.name, avatar_url: newProfile.avatar_url }),
+              });
+            }
+          }
+        } catch {}
       } else {
         setProfile(null);
       }
@@ -61,6 +87,34 @@ export default function AuthMenu() {
       sub.subscription.unsubscribe();
     };
   }, []);
+
+  // Load credits when menu opens
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!menuOpen || !profile?.id) return;
+      try {
+        setLoadingCredits(true);
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) return;
+        if (!API_BASE) return;
+        const res = await fetch(`${API_BASE}/api/billing/credits`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!cancelled && res.ok) {
+          const json: CreditsResponse = await res.json();
+          setCredits(json);
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) setLoadingCredits(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [menuOpen, profile?.id]);
 
   const signIn = async () => {
     // Prefer Google OAuth if configured. You can add more providers as needed.
@@ -132,12 +186,21 @@ export default function AuthMenu() {
       </button>
 
       {menuOpen && (
-        <div className="absolute right-0 mt-2 w-44 rounded-md border border-black/5 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-lg py-1 text-sm">
+        <div className="absolute right-0 mt-2 w-60 rounded-md border border-black/5 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-lg py-1 text-sm">
+          <div className="px-3 pt-3 pb-2 border-b border-black/5 dark:border-white/10">
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Plan</div>
+              <div className="text-xs font-medium text-gray-900 dark:text-gray-100">{credits?.plan || "free"}</div>
+            </div>
+            <div className="mt-1">
+              <CreditsBar balance={credits?.credit_balance || 0} periodLimit={credits?.period_limit ?? null} />
+            </div>
+          </div>
           <div className="px-3 py-2">
             <div className="text-xs text-gray-500 dark:text-gray-400">Signed in as</div>
             <div className="text-gray-900 dark:text-gray-100 truncate">{profile.email}</div>
           </div>
-          <a href="#profile" className="block px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 text-gray-900 dark:text-gray-100">Profile</a>
+          <Link href="/profile" className="block px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 text-gray-900 dark:text-gray-100">Profile</Link>
           <button onClick={signOut} className="w-full text-left px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 text-red-600">Sign out</button>
         </div>
       )}

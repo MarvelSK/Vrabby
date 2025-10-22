@@ -11,8 +11,8 @@ import uuid
 from datetime import datetime
 from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
 
-from app.models.messages import Message
 from app.core.terminal_ui import ui
+from app.models.messages import Message
 
 from ..base import BaseCLI, CLIType
 
@@ -78,7 +78,7 @@ class CursorAgentCLI(BaseCLI):
             }
 
     def _handle_cursor_stream_json(
-        self, event: Dict[str, Any], project_path: str, session_id: str
+            self, event: Dict[str, Any], project_path: str, session_id: str
     ) -> Optional[Message]:
         """Handle Cursor stream-json format (NDJSON events) to be compatible with Claude Code CLI output"""
         event_type = event.get("type")
@@ -257,14 +257,14 @@ class CursorAgentCLI(BaseCLI):
             print(f"❌ [Cursor] Failed to create AGENTS.md: {e}")
 
     async def execute_with_streaming(
-        self,
-        instruction: str,
-        project_path: str,
-        session_id: Optional[str] = None,
-        log_callback: Optional[Callable[[str], Any]] = None,
-        images: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        is_initial_prompt: bool = False,
+            self,
+            instruction: str,
+            project_path: str,
+            session_id: Optional[str] = None,
+            log_callback: Optional[Callable[[str], Any]] = None,
+            images: Optional[List[Dict[str, Any]]] = None,
+            model: Optional[str] = None,
+            is_initial_prompt: bool = False,
     ) -> AsyncGenerator[Message, None]:
         """Execute Cursor Agent CLI with stream-json format and session continuity"""
         # Ensure AGENTS.md exists for system prompt
@@ -355,23 +355,23 @@ class CursorAgentCLI(BaseCLI):
                     if not cursor_session_id:
                         # Try to extract session ID from any event that contains it
                         potential_session_id = (
-                            event.get("sessionId")
-                            or event.get("chatId")
-                            or event.get("session_id")
-                            or event.get("chat_id")
-                            or event.get("threadId")
-                            or event.get("thread_id")
+                                event.get("sessionId")
+                                or event.get("chatId")
+                                or event.get("session_id")
+                                or event.get("chat_id")
+                                or event.get("threadId")
+                                or event.get("thread_id")
                         )
 
                         # Also check in nested structures
                         if not potential_session_id and isinstance(
-                            event.get("message"), dict
+                                event.get("message"), dict
                         ):
                             potential_session_id = (
-                                event["message"].get("sessionId")
-                                or event["message"].get("chatId")
-                                or event["message"].get("session_id")
-                                or event["message"].get("chat_id")
+                                    event["message"].get("sessionId")
+                                    or event["message"].get("chatId")
+                                    or event["message"].get("session_id")
+                                    or event["message"].get("chat_id")
                             )
 
                         if potential_session_id and potential_session_id != active_session_id:

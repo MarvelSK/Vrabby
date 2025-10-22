@@ -4,27 +4,26 @@ Moved from unified_manager.py to a dedicated module.
 """
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from app.core.terminal_ui import ui
 from app.core.websocket.manager import manager as ws_manager
 from app.models.messages import Message
 
-from .base import CLIType
 from .adapters import ClaudeCodeCLI, CursorAgentCLI, CodexCLI, QwenCLI, GeminiCLI
+from .base import CLIType
 
 
 class UnifiedCLIManager:
     """Unified manager for all CLI implementations"""
 
     def __init__(
-        self,
-        project_id: str,
-        project_path: str,
-        session_id: str,
-        conversation_id: str,
-        db: Any,  # SQLAlchemy Session
+            self,
+            project_id: str,
+            project_path: str,
+            session_id: str,
+            conversation_id: str,
+            db: Any,  # SQLAlchemy Session
     ):
         self.project_id = project_id
         self.project_path = project_path
@@ -42,12 +41,12 @@ class UnifiedCLIManager:
         }
 
     async def _attempt_fallback(
-        self,
-        failed_cli: CLIType,
-        instruction: str,
-        images: Optional[List[Dict[str, Any]]],
-        model: Optional[str],
-        is_initial_prompt: bool,
+            self,
+            failed_cli: CLIType,
+            instruction: str,
+            images: Optional[List[Dict[str, Any]]],
+            model: Optional[str],
+            is_initial_prompt: bool,
     ) -> Optional[Dict[str, Any]]:
         fallback_type = CLIType.CLAUDE
         if failed_cli == fallback_type:
@@ -86,13 +85,13 @@ class UnifiedCLIManager:
             return None
 
     async def execute_instruction(
-        self,
-        instruction: str,
-        cli_type: CLIType,
-        fallback_enabled: bool = True,  # Kept for backward compatibility but not used
-        images: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        is_initial_prompt: bool = False,
+            self,
+            instruction: str,
+            cli_type: CLIType,
+            fallback_enabled: bool = True,  # Kept for backward compatibility but not used
+            images: Optional[List[Dict[str, Any]]] = None,
+            model: Optional[str] = None,
+            is_initial_prompt: bool = False,
     ) -> Dict[str, Any]:
         """Execute instruction with specified CLI"""
 
@@ -151,12 +150,12 @@ class UnifiedCLIManager:
         }
 
     async def _execute_with_cli(
-        self,
-        cli,
-        instruction: str,
-        images: Optional[List[Dict[str, Any]]],
-        model: Optional[str] = None,
-        is_initial_prompt: bool = False,
+            self,
+            cli,
+            instruction: str,
+            images: Optional[List[Dict[str, Any]]],
+            model: Optional[str] = None,
+            is_initial_prompt: bool = False,
     ) -> Dict[str, Any]:
         """Execute instruction with a specific CLI"""
 
@@ -176,13 +175,13 @@ class UnifiedCLIManager:
             pass
 
         async for message in cli.execute_with_streaming(
-            instruction=instruction,
-            project_path=self.project_path,
-            session_id=self.session_id,
-            log_callback=log_callback,
-            images=images,
-            model=model,
-            is_initial_prompt=is_initial_prompt,
+                instruction=instruction,
+                project_path=self.project_path,
+                session_id=self.session_id,
+                log_callback=log_callback,
+                images=images,
+                model=model,
+                is_initial_prompt=is_initial_prompt,
         ):
             # Check for error messages or result status
             if message.message_type == "error":
@@ -248,7 +247,7 @@ class UnifiedCLIManager:
 
             # Check if message should be hidden from UI
             should_hide = (
-                message.metadata_json and message.metadata_json.get("hidden_from_ui", False)
+                    message.metadata_json and message.metadata_json.get("hidden_from_ui", False)
             )
 
             # Send message via WebSocket only if not hidden
@@ -315,7 +314,7 @@ class UnifiedCLIManager:
         # End _execute_with_cli
 
     async def check_cli_status(
-        self, cli_type: CLIType, selected_model: Optional[str] = None
+            self, cli_type: CLIType, selected_model: Optional[str] = None
     ) -> Dict[str, Any]:
         """Check status of a specific CLI"""
         if cli_type in self.cli_adapters:

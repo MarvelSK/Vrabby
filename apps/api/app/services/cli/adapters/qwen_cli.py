@@ -7,12 +7,11 @@ chunks are surfaced to the UI (unlike some providers that hide them).
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 import os
+import shutil
 import uuid
 from dataclasses import dataclass
-import shutil
 from datetime import datetime
 from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional
 
@@ -284,10 +283,10 @@ class QwenCLI(BaseCLI):
             async def _edit_file(params: Dict[str, Any]) -> Dict[str, Any]:
                 # Handle edit requests with proper parameter validation
                 path = params.get('path', params.get('file_path', 'unknown'))
-                
+
                 # Log the edit attempt for debugging
                 ui.debug(f"Qwen edit request: path={path}, has_old_string={'old_string' in params}", "Qwen")
-                
+
                 if "old_string" not in params:
                     ui.warning(
                         f"Qwen edit missing 'old_string': {path}",
@@ -296,7 +295,7 @@ class QwenCLI(BaseCLI):
                     # Return success anyway to not block Qwen's workflow
                     # This allows Qwen to continue even with malformed requests
                     return {"success": True}
-                
+
                 # For safety, we don't actually perform the edit but return success
                 ui.debug(f"Qwen edit would modify: {path}", "Qwen")
                 return {"success": True}
@@ -325,11 +324,13 @@ class QwenCLI(BaseCLI):
                             if "[ERROR] [ImportProcessor]" in decoded:
                                 continue
                             # Skip ENOENT errors for node_modules paths
-                            if "ENOENT" in decoded and ("node_modules" in decoded or "tailwind" in decoded or "supabase" in decoded):
+                            if "ENOENT" in decoded and (
+                                    "node_modules" in decoded or "tailwind" in decoded or "supabase" in decoded):
                                 continue
                             # Only log meaningful errors
                             if decoded and not decoded.startswith("DEBUG"):
                                 ui.warning(decoded, "Qwen STDERR")
+
                     asyncio.create_task(_log_stderr(proc.stderr))
             except Exception:
                 pass
@@ -355,14 +356,14 @@ class QwenCLI(BaseCLI):
         return self._client
 
     async def execute_with_streaming(
-        self,
-        instruction: str,
-        project_path: str,
-        session_id: Optional[str] = None,
-        log_callback: Optional[Callable[[str], Any]] = None,
-        images: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        is_initial_prompt: bool = False,
+            self,
+            instruction: str,
+            project_path: str,
+            session_id: Optional[str] = None,
+            log_callback: Optional[Callable[[str], Any]] = None,
+            images: Optional[List[Dict[str, Any]]] = None,
+            model: Optional[str] = None,
+            is_initial_prompt: bool = False,
     ) -> AsyncGenerator[Message, None]:
         client = await self._ensure_client()
         # Ensure provider markdown exists in project repo
@@ -489,7 +490,8 @@ class QwenCLI(BaseCLI):
                 # Flush remaining updates quickly
                 while not q.empty():
                     update = q.get_nowait()
-                    async for m in self._update_to_messages(update, project_path, session_id, thought_buffer, text_buffer):
+                    async for m in self._update_to_messages(update, project_path, session_id, thought_buffer,
+                                                            text_buffer):
                         if m:
                             yield m
                 # Handle prompt exception (e.g., session not found) with one retry
@@ -550,7 +552,8 @@ class QwenCLI(BaseCLI):
                 if task is not prompt_task:
                     update = task.result()
                     # Suppress verbose per-chunk logs; log only tool calls below
-                    async for m in self._update_to_messages(update, project_path, session_id, thought_buffer, text_buffer):
+                    async for m in self._update_to_messages(update, project_path, session_id, thought_buffer,
+                                                            text_buffer):
                         if m:
                             yield m
 
@@ -568,12 +571,12 @@ class QwenCLI(BaseCLI):
         ui.info(f"[{turn_id}] turn completed", "Qwen")
 
     async def _update_to_messages(
-        self,
-        update: Dict[str, Any],
-        project_path: str,
-        session_id: Optional[str],
-        thought_buffer: List[str],
-        text_buffer: List[str],
+            self,
+            update: Dict[str, Any],
+            project_path: str,
+            session_id: Optional[str],
+            thought_buffer: List[str],
+            text_buffer: List[str],
     ) -> AsyncGenerator[Optional[Message], None]:
         kind = update.get("sessionUpdate") or update.get("type")
         now = datetime.utcnow()
@@ -603,9 +606,9 @@ class QwenCLI(BaseCLI):
             try:
                 tn = (tool_name or "").lower()
                 is_opaque = (
-                    tn in ("call", "tool", "toolcall")
-                    or tn.startswith("call_")
-                    or tn.startswith("call-")
+                        tn in ("call", "tool", "toolcall")
+                        or tn.startswith("call_")
+                        or tn.startswith("call-")
                 )
                 if is_opaque or summary.strip().endswith("`executing...`"):
                     return
@@ -727,11 +730,11 @@ class QwenCLI(BaseCLI):
             first = locs[0]
             if isinstance(first, dict):
                 path = (
-                    first.get("path")
-                    or first.get("file")
-                    or first.get("file_path")
-                    or first.get("filePath")
-                    or first.get("uri")
+                        first.get("path")
+                        or first.get("file")
+                        or first.get("file_path")
+                        or first.get("filePath")
+                        or first.get("uri")
                 )
                 if isinstance(path, str) and path.startswith("file://"):
                     path = path[len("file://"):]
@@ -741,10 +744,10 @@ class QwenCLI(BaseCLI):
                 for c in content:
                     if isinstance(c, dict):
                         cand = (
-                            c.get("path")
-                            or c.get("file")
-                            or c.get("file_path")
-                            or (c.get("args") or {}).get("path")
+                                c.get("path")
+                                or c.get("file")
+                                or c.get("file_path")
+                                or (c.get("args") or {}).get("path")
                         )
                         if cand:
                             path = cand

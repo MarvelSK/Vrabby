@@ -1,11 +1,10 @@
-import subprocess
 import asyncio
-import json
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from app.services.cli.unified_manager import CursorAgentCLI
+
 from app.services.cli.base import CLIType
+from app.services.cli.unified_manager import CursorAgentCLI
+from fastapi import APIRouter
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -13,7 +12,7 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 CLI_OPTIONS = [
     {
         "id": "claude",
-        "name": "Claude Code", 
+        "name": "Claude Code",
         "check_command": ["claude", "--version"]
     },
     {
@@ -22,6 +21,7 @@ CLI_OPTIONS = [
         "check_command": ["cursor-agent", "--version"]
     },
 ]
+
 
 class CLIStatusResponse(BaseModel):
     cli_id: str
@@ -39,15 +39,15 @@ async def check_cli_installation(cli_id: str, command: list) -> CLIStatusRespons
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        
+
         stdout, stderr = await process.communicate()
-        
+
         if process.returncode == 0:
             # 성공적으로 실행된 경우
             version_output = stdout.decode().strip()
             # 버전 정보에서 실제 버전 번호 추출 (첫 번째 라인만 사용)
             version = version_output.split('\n')[0] if version_output else "installed"
-            
+
             return CLIStatusResponse(
                 cli_id=cli_id,
                 installed=True,
@@ -61,7 +61,7 @@ async def check_cli_installation(cli_id: str, command: list) -> CLIStatusRespons
                 installed=False,
                 error=error_msg
             )
-            
+
     except FileNotFoundError:
         # 명령어를 찾을 수 없는 경우 (설치되지 않음)
         return CLIStatusResponse(
@@ -82,7 +82,7 @@ async def check_cli_installation(cli_id: str, command: list) -> CLIStatusRespons
 async def get_cli_status() -> Dict[str, Any]:
     """모든 CLI의 설치 상태를 확인하고 반환합니다."""
     results = {}
-    
+
     # 새로운 UnifiedCLIManager의 CLI 인스턴스 사용
     from app.services.cli.unified_manager import ClaudeCodeCLI, CursorAgentCLI, CodexCLI, QwenCLI, GeminiCLI
     cli_instances = {
@@ -92,22 +92,23 @@ async def get_cli_status() -> Dict[str, Any]:
         "qwen": QwenCLI(),
         "gemini": GeminiCLI()
     }
-    
+
     # 모든 CLI를 병렬로 확인
     tasks = []
     for cli_id, cli_instance in cli_instances.items():
         print(f"[DEBUG] Setting up check for CLI: {cli_id}")
+
         async def check_cli(cli_id, cli_instance):
             print(f"[DEBUG] Checking CLI: {cli_id}")
             status = await cli_instance.check_availability()
             print(f"[DEBUG] CLI {cli_id} status: {status}")
             return cli_id, status
-        
+
         tasks.append(check_cli(cli_id, cli_instance))
-    
+
     # 모든 태스크 실행
     cli_results = await asyncio.gather(*tasks)
-    
+
     # 결과를 딕셔너리로 변환
     for cli_id, status in cli_results:
         results[cli_id] = {
@@ -116,7 +117,7 @@ async def get_cli_status() -> Dict[str, Any]:
             "error": status.get("error"),
             "checking": False
         }
-    
+
     return results
 
 
@@ -128,6 +129,7 @@ GLOBAL_SETTINGS = {
         "cursor": {"model": "gpt-5"}
     }
 }
+
 
 class GlobalSettingsModel(BaseModel):
     default_cli: str
@@ -144,10 +146,10 @@ async def get_global_settings() -> Dict[str, Any]:
 async def update_global_settings(settings: GlobalSettingsModel) -> Dict[str, Any]:
     """글로벌 설정을 업데이트합니다."""
     global GLOBAL_SETTINGS
-    
+
     GLOBAL_SETTINGS.update({
         "default_cli": settings.default_cli,
         "cli_settings": settings.cli_settings
     })
-    
+
     return {"success": True, "settings": GLOBAL_SETTINGS}

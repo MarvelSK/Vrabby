@@ -12,13 +12,13 @@ import json
 import os
 import uuid
 from datetime import datetime
-from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
 
 from app.core.terminal_ui import ui
 from app.models.messages import Message
 
-from ..base import BaseCLI, CLIType
 from .qwen_cli import _ACPClient, _mime_for  # Reuse minimal ACP client
+from ..base import BaseCLI, CLIType
 
 
 class GeminiCLI(BaseCLI):
@@ -138,14 +138,14 @@ class GeminiCLI(BaseCLI):
         return self._client
 
     async def execute_with_streaming(
-        self,
-        instruction: str,
-        project_path: str,
-        session_id: Optional[str] = None,
-        log_callback: Optional[Callable[[str], Any]] = None,
-        images: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        is_initial_prompt: bool = False,
+            self,
+            instruction: str,
+            project_path: str,
+            session_id: Optional[str] = None,
+            log_callback: Optional[Callable[[str], Any]] = None,
+            images: Optional[List[Dict[str, Any]]] = None,
+            model: Optional[str] = None,
+            is_initial_prompt: bool = False,
     ) -> AsyncGenerator[Message, None]:
         client = await self._ensure_client()
         # Ensure provider markdown exists in project repo
@@ -285,6 +285,7 @@ class GeminiCLI(BaseCLI):
                     "session/prompt", {"sessionId": stored_session_id, "prompt": parts}
                 )
             )
+
         prompt_task = _make_prompt_task()
 
         while True:
@@ -297,7 +298,8 @@ class GeminiCLI(BaseCLI):
                 # Drain remaining
                 while not q.empty():
                     update = q.get_nowait()
-                    async for m in self._update_to_messages(update, project_path, session_id, thought_buffer, text_buffer):
+                    async for m in self._update_to_messages(update, project_path, session_id, thought_buffer,
+                                                            text_buffer):
                         if m:
                             yield m
                 exc = prompt_task.exception()
@@ -366,7 +368,8 @@ class GeminiCLI(BaseCLI):
                         ui.debug(f"[{turn_id}] processing update kind={kind}", "Gemini")
                     except Exception:
                         pass
-                    async for m in self._update_to_messages(update, project_path, session_id, thought_buffer, text_buffer):
+                    async for m in self._update_to_messages(update, project_path, session_id, thought_buffer,
+                                                            text_buffer):
                         if m:
                             yield m
 
@@ -383,12 +386,12 @@ class GeminiCLI(BaseCLI):
         ui.info(f"[{turn_id}] turn completed", "Gemini")
 
     async def _update_to_messages(
-        self,
-        update: Dict[str, Any],
-        project_path: str,
-        session_id: Optional[str],
-        thought_buffer: List[str],
-        text_buffer: List[str],
+            self,
+            update: Dict[str, Any],
+            project_path: str,
+            session_id: Optional[str],
+            thought_buffer: List[str],
+            text_buffer: List[str],
     ) -> AsyncGenerator[Optional[Message], None]:
         kind = update.get("sessionUpdate") or update.get("type")
         now = datetime.utcnow()
@@ -430,7 +433,7 @@ class GeminiCLI(BaseCLI):
             # - Write tool: render only on tool_call_update (Gemini often emits updates only)
             should_render = False
             if (normalized == "Write" and kind == "tool_call_update") or (
-                normalized != "Write" and kind == "tool_call"
+                    normalized != "Write" and kind == "tool_call"
             ):
                 should_render = True
             if not should_render:
@@ -540,11 +543,11 @@ class GeminiCLI(BaseCLI):
             first = locs[0]
             if isinstance(first, dict):
                 path = (
-                    first.get("path")
-                    or first.get("file")
-                    or first.get("file_path")
-                    or first.get("filePath")
-                    or first.get("uri")
+                        first.get("path")
+                        or first.get("file")
+                        or first.get("file_path")
+                        or first.get("filePath")
+                        or first.get("uri")
                 )
                 if isinstance(path, str) and path.startswith("file://"):
                     path = path[len("file://"):]
@@ -554,10 +557,10 @@ class GeminiCLI(BaseCLI):
                 for c in content:
                     if isinstance(c, dict):
                         cand = (
-                            c.get("path")
-                            or c.get("file")
-                            or c.get("file_path")
-                            or (c.get("args") or {}).get("path")
+                                c.get("path")
+                                or c.get("file")
+                                or c.get("file_path")
+                                or (c.get("args") or {}).get("path")
                         )
                         if cand:
                             path = cand

@@ -1,11 +1,13 @@
+from pathlib import Path
+
+from app.core.config import settings
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
-from pathlib import Path
-from app.core.config import settings
 
-# Ensure data directory exists
-db_path = settings.database_url.replace("sqlite:///", "")
-Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+# Ensure data directory exists only for SQLite file DBs
+if settings.database_url.startswith("sqlite:///"):
+    db_path = settings.database_url.replace("sqlite:///", "")
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
 # Create engine with SQLite-specific settings
 connect_args = {}
@@ -13,7 +15,7 @@ if settings.database_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
 engine = create_engine(
-    settings.database_url, 
+    settings.database_url,
     connect_args=connect_args,
     pool_pre_ping=True
 )
@@ -27,6 +29,7 @@ if settings.database_url.startswith("sqlite"):
         cursor.close()
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
 
 def get_db():
     """Database session dependency"""

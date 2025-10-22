@@ -7,9 +7,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import shutil
 import shlex
-import subprocess
+import shutil
 import uuid
 from datetime import datetime
 from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
@@ -89,7 +88,8 @@ class CodexCLI(BaseCLI):
             print(f"[DEBUG] Running command: {codex_exe} --version")
             env = self._augment_path(os.environ.copy())
             cmd = self._build_invocation(codex_exe, "--version")
-            result = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=env)
+            result = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE,
+                                                          stderr=asyncio.subprocess.PIPE, env=env)
             stdout, stderr = await result.communicate()
 
             stdout_text = stdout.decode(errors="ignore").strip()
@@ -126,29 +126,30 @@ class CodexCLI(BaseCLI):
             }
 
     async def execute_with_streaming(
-        self,
-        instruction: str,
-        project_path: str,
-        session_id: Optional[str] = None,
-        log_callback: Optional[Callable[[str], Any]] = None,
-        images: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        is_initial_prompt: bool = False,
+            self,
+            instruction: str,
+            project_path: str,
+            session_id: Optional[str] = None,
+            log_callback: Optional[Callable[[str], Any]] = None,
+            images: Optional[List[Dict[str, Any]]] = None,
+            model: Optional[str] = None,
+            is_initial_prompt: bool = False,
     ) -> AsyncGenerator[Message, None]:
         """Execute Codex CLI with auto-approval and message buffering"""
 
         codex_exe = self._locate_codex_executable()
         if not codex_exe:
-            raise RuntimeError("Codex CLI not available. Install with `npm install -g @openai/codex` and ensure it is on PATH.")
+            raise RuntimeError(
+                "Codex CLI not available. Install with `npm install -g @openai/codex` and ensure it is on PATH.")
 
         # Ensure AGENTS.md exists in project repo with system prompt (essential)
         # If needed, set Vrabby_DISABLE_AGENTS_MD=1 to skip.
         try:
             if str(os.getenv("Vrabby_DISABLE_AGENTS_MD", "")).lower() in (
-                "1",
-                "true",
-                "yes",
-                "on",
+                    "1",
+                    "true",
+                    "yes",
+                    "on",
             ):
                 ui.debug("AGENTS.md auto-creation disabled by env", "Codex")
             else:
@@ -351,7 +352,7 @@ Do not create subdirectories unless specifically requested by the user.
             if images:
                 image_refs = []
                 for i in range(len(images)):
-                    image_refs.append(f"[Image #{i+1}]")
+                    image_refs.append(f"[Image #{i + 1}]")
                 image_context = (
                     f"\n\nI've attached {len(images)} image(s) for you to analyze: {', '.join(image_refs)}"
                 )
@@ -379,7 +380,7 @@ Do not create subdirectories unless specifically requested by the user.
                     local_path = _iget(image_data, "path")
                     if local_path:
                         ui.info(
-                            f"📷 Image #{i+1} path sent to Codex: {local_path}", "Codex"
+                            f"📷 Image #{i + 1} path sent to Codex: {local_path}", "Codex"
                         )
                         items.append({"type": "local_image", "path": str(local_path)})
                         continue
@@ -413,7 +414,7 @@ Do not create subdirectories unless specifically requested by the user.
                             with _tmp.NamedTemporaryFile(delete=False, suffix=suffix) as tmpf:
                                 tmpf.write(img_bytes)
                                 ui.info(
-                                    f"📷 Image #{i+1} saved to temporary path: {tmpf.name}",
+                                    f"📷 Image #{i + 1} saved to temporary path: {tmpf.name}",
                                     "Codex",
                                 )
                                 items.append({"type": "local_image", "path": tmpf.name})
@@ -431,7 +432,7 @@ Do not create subdirectories unless specifically requested by the user.
                 # Log items being sent to agent
                 if images and len(items) > 1:
                     ui.debug(
-                        f"Sending {len(items)} items to Codex (1 text + {len(items)-1} images)",
+                        f"Sending {len(items)} items to Codex (1 text + {len(items) - 1} images)",
                         "Codex",
                     )
                     for item in items:
@@ -453,12 +454,12 @@ Do not create subdirectories unless specifically requested by the user.
 
                     # Only process events for current request (exclude system events)
                     if (
-                        current_request_id
-                        and event_id != current_request_id
-                        and msg_type not in [
-                            "session_configured",
-                            "mcp_list_tools_response",
-                        ]
+                            current_request_id
+                            and event_id != current_request_id
+                            and msg_type not in [
+                        "session_configured",
+                        "mcp_list_tools_response",
+                    ]
                     ):
                         continue
 
@@ -795,8 +796,8 @@ Do not create subdirectories unless specifically requested by the user.
                     try:
                         session_data = json.loads(project.active_cursor_session_id)
                         if (
-                            isinstance(session_data, dict)
-                            and "codex_rollout" in session_data
+                                isinstance(session_data, dict)
+                                and "codex_rollout" in session_data
                         ):
                             rollout_path = session_data["codex_rollout"]
                             ui.debug(

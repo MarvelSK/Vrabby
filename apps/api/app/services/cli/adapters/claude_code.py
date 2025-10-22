@@ -83,14 +83,14 @@ class ClaudeCodeCLI(BaseCLI):
             }
 
     async def execute_with_streaming(
-        self,
-        instruction: str,
-        project_path: str,
-        session_id: Optional[str] = None,
-        log_callback: Optional[Callable[[str], Any]] = None,
-        images: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        is_initial_prompt: bool = False,
+            self,
+            instruction: str,
+            project_path: str,
+            session_id: Optional[str] = None,
+            log_callback: Optional[Callable[[str], Any]] = None,
+            images: Optional[List[Dict[str, Any]]] = None,
+            model: Optional[str] = None,
+            is_initial_prompt: bool = False,
     ) -> AsyncGenerator[Message, None]:
         """Execute instruction using Claude Code Python SDK"""
 
@@ -332,13 +332,13 @@ node_modules/
 
                         # Handle SystemMessage for session_id extraction
                         if (
-                            isinstance(message_obj, SystemMessage)
-                            or "SystemMessage" in str(type(message_obj))
+                                isinstance(message_obj, SystemMessage)
+                                or "SystemMessage" in str(type(message_obj))
                         ):
                             # Extract session_id if available
                             if (
-                                hasattr(message_obj, "session_id")
-                                and message_obj.session_id
+                                    hasattr(message_obj, "session_id")
+                                    and message_obj.session_id
                             ):
                                 claude_session_id = message_obj.session_id
                                 await self.set_session_id(
@@ -368,14 +368,14 @@ node_modules/
 
                         # Handle AssistantMessage (complete messages)
                         elif (
-                            isinstance(message_obj, AssistantMessage)
-                            or "AssistantMessage" in str(type(message_obj))
+                                isinstance(message_obj, AssistantMessage)
+                                or "AssistantMessage" in str(type(message_obj))
                         ):
                             content = ""
 
                             # Process content - AssistantMessage has content: list[ContentBlock]
                             if hasattr(message_obj, "content") and isinstance(
-                                message_obj.content, list
+                                    message_obj.content, list
                             ):
                                 for block in message_obj.content:
                                     # Import block types for comparison
@@ -443,8 +443,8 @@ node_modules/
 
                         # Handle UserMessage (tool results, etc.)
                         elif (
-                            isinstance(message_obj, UserMessage)
-                            or "UserMessage" in str(type(message_obj))
+                                isinstance(message_obj, UserMessage)
+                                or "UserMessage" in str(type(message_obj))
                         ):
                             # UserMessage has content: str according to types.py
                             # UserMessages are typically tool results - we don't need to show them
@@ -452,12 +452,12 @@ node_modules/
 
                         # Handle ResultMessage (final session completion)
                         elif (
-                            isinstance(message_obj, ResultMessage)
-                            or "ResultMessage" in str(type(message_obj))
-                            or (
-                                hasattr(message_obj, "type")
-                                and getattr(message_obj, "type", None) == "result"
-                            )
+                                isinstance(message_obj, ResultMessage)
+                                or "ResultMessage" in str(type(message_obj))
+                                or (
+                                        hasattr(message_obj, "type")
+                                        and getattr(message_obj, "type", None) == "result"
+                                )
                         ):
                             ui.success(
                                 f"Session completed in {getattr(message_obj, 'duration_ms', 0)}ms",
@@ -511,7 +511,8 @@ node_modules/
                     if session_settings_path and os.path.exists(session_settings_path):
                         os.remove(session_settings_path)
                 except Exception as cleanup_error:
-                    ui.debug(f"Failed to remove temporary settings file {session_settings_path}: {cleanup_error}", "Claude SDK")
+                    ui.debug(f"Failed to remove temporary settings file {session_settings_path}: {cleanup_error}",
+                             "Claude SDK")
                 # Restore original working directory
                 os.chdir(original_cwd)
 

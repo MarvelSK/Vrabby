@@ -2,10 +2,9 @@
 Project Initializer Service
 Handles project initialization, scaffolding, and setup
 """
-import os
 import json
+import os
 import shutil
-from pathlib import Path
 from typing import Optional
 
 from app.core.config import settings
@@ -28,43 +27,43 @@ async def initialize_project(project_id: str, name: str) -> str:
     Returns:
         str: Path to the created project directory
     """
-    
+
     # Create project directory
     project_path = os.path.join(settings.projects_root, project_id, "repo")
     ensure_dir(project_path)
-    
+
     # Create assets directory
     assets_path = os.path.join(settings.projects_root, project_id, "assets")
     ensure_dir(assets_path)
-    
+
     try:
         # Scaffold NextJS project using create-next-app (includes automatic git init)
         scaffold_nextjs_minimal(project_path)
-        
+
         # CRITICAL: Force create independent git repository for each project
         # create-next-app inherits parent .git when run inside existing repo
         # This ensures each project has its own isolated git history
         init_git_repo(project_path)
-        
+
         # Create initial .env file
         env_content = f"NEXT_PUBLIC_PROJECT_ID={project_id}\nNEXT_PUBLIC_PROJECT_NAME={name}\n"
         write_env_file(project_path, env_content)
-        
+
         # Create metadata directory and initial metadata file
         create_project_metadata(project_id, name)
-        
+
         # Setup Claude Code configuration
         setup_claude_config(project_path)
-        
+
         return project_path
-        
+
     except Exception as e:
         # Clean up failed project directory
         import shutil
         project_root = os.path.join(settings.projects_root, project_id)
         if os.path.exists(project_root):
             shutil.rmtree(project_root)
-        
+
         # Re-raise with user-friendly message
         raise Exception(f"Failed to initialize Next.js project: {str(e)}")
 
@@ -164,12 +163,12 @@ async def get_project_path(project_id: str) -> Optional[str]:
     Returns:
         Optional[str]: Path to project directory if it exists
     """
-    
+
     project_path = os.path.join(settings.projects_root, project_id, "repo")
-    
+
     if os.path.exists(project_path):
         return project_path
-    
+
     return None
 
 
@@ -183,7 +182,7 @@ async def project_exists(project_id: str) -> bool:
     Returns:
         bool: True if project exists
     """
-    
+
     project_path = os.path.join(settings.projects_root, project_id)
     return os.path.exists(project_path)
 
@@ -197,19 +196,19 @@ def create_project_metadata(project_id: str, name: str):
         project_id: Project identifier
         name: Project name
     """
-    
+
     # Create data directory structure
     data_dir = os.path.join(settings.projects_root, project_id, "data")
     metadata_dir = os.path.join(data_dir, "metadata")
     ensure_dir(metadata_dir)
-    
+
     metadata_data = {
         "name": name,
         "description": "Project created with AI assistance"
     }
-    
+
     metadata_path = os.path.join(metadata_dir, f"{project_id}.json")
-    
+
     try:
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata_data, f, indent=2, ensure_ascii=False)
@@ -231,25 +230,25 @@ async def parse_and_update_project_metadata(project_id: str, db_session) -> dict
     Returns:
         dict: Parsed project information
     """
-    
+
     metadata_path = os.path.join(settings.projects_root, project_id, "data", "metadata", f"{project_id}.json")
-    
+
     if not os.path.exists(metadata_path):
         raise Exception(f"Metadata file not found at {metadata_path}")
-    
+
     try:
         with open(metadata_path, 'r', encoding='utf-8') as f:
             metadata = json.load(f)
-        
+
         # Update project in database
         from app.models.projects import Project as ProjectModel
         project = db_session.query(ProjectModel).filter(ProjectModel.id == project_id).first()
-        
+
         if project:
             # Update project fields from metadata
             if metadata.get('name') and metadata['name'] != project.name:
                 project.name = metadata['name']
-            
+
             # Store additional info in settings (only description since other fields are pre-configured)
             project.settings = {
                 "description": metadata.get('description', ''),
@@ -258,12 +257,12 @@ async def parse_and_update_project_metadata(project_id: str, db_session) -> dict
                 "version": "1.0.0",  # Pre-configured
                 "ai_generated": True
             }
-            
+
             db_session.commit()
             ui.success(f"Updated project {project_id} with metadata", "Project")
-        
+
         return metadata
-        
+
     except Exception as e:
         ui.error(f"Failed to parse metadata for project {project_id}: {e}", "Project")
         raise
@@ -283,13 +282,13 @@ def setup_claude_config(project_path: str):
     """
     try:
         from app.core.terminal_ui import ui
-        
+
         # Create .claude directory structure
         claude_dir = os.path.join(project_path, ".claude")
         claude_hooks_dir = os.path.join(claude_dir, "hooks")
         ensure_dir(claude_dir)
         ensure_dir(claude_hooks_dir)
-        
+
         # Get paths to source files in project root
         # Current file: apps/api/app/services/project/initializer.py
         # Go up to project root: ../../../../..
@@ -299,7 +298,7 @@ def setup_claude_config(project_path: str):
         scripts_dir = os.path.join(project_root, "scripts")
         settings_src = os.path.join(scripts_dir, "settings.json")
         type_check_src = os.path.join(scripts_dir, "type_check.sh")
-        
+
         # Copy settings.json
         settings_dst = os.path.join(claude_dir, "settings.json")
         if os.path.exists(settings_src):
@@ -307,7 +306,7 @@ def setup_claude_config(project_path: str):
             ui.success(f"Copied settings.json to {settings_dst}", "Claude Config")
         else:
             ui.warning(f"Source file not found: {settings_src}", "Claude Config")
-        
+
         # Copy type_check.sh
         type_check_dst = os.path.join(claude_hooks_dir, "type_check.sh")
         if os.path.exists(type_check_src):
@@ -317,9 +316,9 @@ def setup_claude_config(project_path: str):
             ui.success(f"Copied type_check.sh to {type_check_dst}", "Claude Config")
         else:
             ui.warning(f"Source file not found: {type_check_src}", "Claude Config")
-        
+
         ui.success("Claude Code configuration setup complete", "Claude Config")
-        
+
     except Exception as e:
         ui.error(f"Failed to setup Claude configuration: {e}", "Claude Config")
         # Don't fail the whole project creation for this

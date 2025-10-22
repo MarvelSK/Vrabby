@@ -1,9 +1,10 @@
 """
 Service tokens model for storing access tokens (local development only)
 """
+from app.db.base import Base
 from sqlalchemy import Column, String, DateTime, Text
 from sqlalchemy.sql import func
-from app.db.base import Base
+
 
 class ServiceToken(Base):
     __tablename__ = "service_tokens"
@@ -15,7 +16,7 @@ class ServiceToken(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     last_used = Column(DateTime(timezone=True), nullable=True)
-    
+
     # Add unique constraint to prevent multiple tokens per provider (optional)
     # If you want to allow multiple tokens per provider, remove this
     __table_args__ = (

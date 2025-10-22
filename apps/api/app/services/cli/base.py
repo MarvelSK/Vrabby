@@ -137,14 +137,14 @@ class BaseCLI(ABC):
 
     @abstractmethod
     async def execute_with_streaming(
-        self,
-        instruction: str,
-        project_path: str,
-        session_id: Optional[str] = None,
-        log_callback: Optional[Callable[[str], Any]] = None,
-        images: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        is_initial_prompt: bool = False,
+            self,
+            instruction: str,
+            project_path: str,
+            session_id: Optional[str] = None,
+            log_callback: Optional[Callable[[str], Any]] = None,
+            images: Optional[List[Dict[str, Any]]] = None,
+            model: Optional[str] = None,
+            is_initial_prompt: bool = False,
     ) -> AsyncGenerator[Message, None]:
         """Execute an instruction and yield `Message` objects in real time."""
 
@@ -202,8 +202,8 @@ class BaseCLI(ABC):
 
     def is_model_supported(self, model: str) -> bool:
         return (
-            model in self.get_supported_models()
-            or model in MODEL_MAPPING.get(self.cli_type.value, {}).values()
+                model in self.get_supported_models()
+                or model in MODEL_MAPPING.get(self.cli_type.value, {}).values()
         )
 
     def parse_message_data(self, data: Dict[str, Any], project_id: str, session_id: str) -> Message:
@@ -352,9 +352,9 @@ class BaseCLI(ABC):
 
         if normalized_name == "Read":
             file_path = (
-                tool_input.get("file_path")
-                or tool_input.get("path")
-                or tool_input.get("file", "")
+                    tool_input.get("file_path")
+                    or tool_input.get("path")
+                    or tool_input.get("file", "")
             )
             if file_path:
                 filename = file_path.split("/")[-1]
@@ -362,9 +362,9 @@ class BaseCLI(ABC):
             return "Reading file"
         elif normalized_name == "Write":
             file_path = (
-                tool_input.get("file_path")
-                or tool_input.get("path")
-                or tool_input.get("file", "")
+                    tool_input.get("file_path")
+                    or tool_input.get("path")
+                    or tool_input.get("file", "")
             )
             if file_path:
                 filename = file_path.split("/")[-1]
@@ -372,9 +372,9 @@ class BaseCLI(ABC):
             return "Writing file"
         elif normalized_name == "Edit":
             file_path = (
-                tool_input.get("file_path")
-                or tool_input.get("path")
-                or tool_input.get("file", "")
+                    tool_input.get("file_path")
+                    or tool_input.get("path")
+                    or tool_input.get("file", "")
             )
             if file_path:
                 filename = file_path.split("/")[-1]
@@ -382,9 +382,9 @@ class BaseCLI(ABC):
             return "Editing file"
         elif normalized_name == "Bash":
             command = (
-                tool_input.get("command")
-                or tool_input.get("cmd")
-                or tool_input.get("script", "")
+                    tool_input.get("command")
+                    or tool_input.get("cmd")
+                    or tool_input.get("script", "")
             )
             if command:
                 cmd_display = command.split()[0] if command.split() else command
@@ -478,9 +478,9 @@ class BaseCLI(ABC):
 
         if normalized_name == "Edit":
             file_path = (
-                tool_input.get("file_path")
-                or tool_input.get("path")
-                or tool_input.get("file", "")
+                    tool_input.get("file_path")
+                    or tool_input.get("path")
+                    or tool_input.get("file", "")
             )
             if file_path:
                 display_path = get_display_path(file_path)
@@ -490,9 +490,9 @@ class BaseCLI(ABC):
             return "**Edit** `file`"
         elif normalized_name == "Read":
             file_path = (
-                tool_input.get("file_path")
-                or tool_input.get("path")
-                or tool_input.get("file", "")
+                    tool_input.get("file_path")
+                    or tool_input.get("path")
+                    or tool_input.get("file", "")
             )
             if file_path:
                 display_path = get_display_path(file_path)
@@ -502,9 +502,9 @@ class BaseCLI(ABC):
             return "**Read** `file`"
         elif normalized_name == "Bash":
             command = (
-                tool_input.get("command")
-                or tool_input.get("cmd")
-                or tool_input.get("script", "")
+                    tool_input.get("command")
+                    or tool_input.get("cmd")
+                    or tool_input.get("script", "")
             )
             if command:
                 display_cmd = command[:40] + "..." if len(command) > 40 else command
@@ -519,14 +519,14 @@ class BaseCLI(ABC):
             return "**SaveMemory** `storing information`"
         elif normalized_name == "Grep":
             pattern = (
-                tool_input.get("pattern")
-                or tool_input.get("query")
-                or tool_input.get("search", "")
+                    tool_input.get("pattern")
+                    or tool_input.get("query")
+                    or tool_input.get("search", "")
             )
             path = (
-                tool_input.get("path")
-                or tool_input.get("file")
-                or tool_input.get("directory", "")
+                    tool_input.get("path")
+                    or tool_input.get("file")
+                    or tool_input.get("directory", "")
             )
             if pattern:
                 if path:
@@ -548,9 +548,9 @@ class BaseCLI(ABC):
             return "**Glob** `pattern`"
         elif normalized_name == "Write":
             file_path = (
-                tool_input.get("file_path")
-                or tool_input.get("path")
-                or tool_input.get("file", "")
+                    tool_input.get("file_path")
+                    or tool_input.get("path")
+                    or tool_input.get("file", "")
             )
             if file_path:
                 display_path = get_display_path(file_path)
@@ -560,9 +560,9 @@ class BaseCLI(ABC):
             return "**Write** `file`"
         elif normalized_name == "MultiEdit":
             file_path = (
-                tool_input.get("file_path")
-                or tool_input.get("path")
-                or tool_input.get("file", "")
+                    tool_input.get("file_path")
+                    or tool_input.get("path")
+                    or tool_input.get("file", "")
             )
             if file_path:
                 display_path = get_display_path(file_path)
@@ -572,9 +572,9 @@ class BaseCLI(ABC):
             return "🔧 **MultiEdit** `file`"
         elif normalized_name == "LS":
             path = (
-                tool_input.get("path")
-                or tool_input.get("directory")
-                or tool_input.get("dir", "")
+                    tool_input.get("path")
+                    or tool_input.get("directory")
+                    or tool_input.get("dir", "")
             )
             if path:
                 display_path = get_display_path(path)

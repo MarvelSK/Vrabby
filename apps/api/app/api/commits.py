@@ -1,12 +1,13 @@
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from typing import List
 import os
-from app.core.config import settings
+from typing import List
+
 from app.api.deps import get_db
-from sqlalchemy.orm import Session
+from app.core.config import settings
 from app.models.projects import Project as ProjectModel
 from app.services.git_ops import list_commits, show_diff, hard_reset
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/commits", tags=["commits"])
 
