@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 class UserAccount(Base):
     __tablename__ = "user_accounts"
+    # TODO: Add tenant_id column and corresponding Alembic migration; implement RLS policies for tenant isolation in Supabase
 
     # Supabase user id
     owner_id: Mapped[str] = mapped_column(String(128), primary_key=True, index=True)

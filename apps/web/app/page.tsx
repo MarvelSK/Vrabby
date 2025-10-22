@@ -10,12 +10,12 @@ import {MotionDiv} from "@/lib/motion";
 import AuthMenu from "@/components/AuthMenu";
 import supabase from "@/lib/supabaseClient";
 import Link from "next/link";
-
+import { logger } from "@/lib/logger";
 
 // Ensure fetch is available
 const fetchAPI = globalThis.fetch || fetch;
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
 type Project = {
     id: string;
@@ -45,6 +45,9 @@ const assistantBrandColors: { [key: string]: string } = {
 };
 
 export default function HomePage() {
+    // TODO: Convert non-interactive data and lists to Server Components with ISR and keep only interactive UI in client components
+    // TODO: Introduce tenant-aware routing via middleware and propagate tenant context to all data fetches
+    // TODO: Audit and reduce unnecessary useEffect usage; memoize expensive computations and handlers to minimize rerenders
     const [projects, setProjects] = useState<Project[]>([]);
     const [showCreate, setShowCreate] = useState(false);
     const [showGlobalSettings, setShowGlobalSettings] = useState(false);
@@ -263,13 +266,13 @@ export default function HomePage() {
             .toUpperCase();
 
     // Auth helper: returns Authorization header for Supabase session if available
-    async function getAuthHeaders() {
+    async function getAuthHeaders(): Promise<Record<string, string>> {
         try {
-            const {data} = await supabase.auth.getSession();
+            const { data } = await supabase.auth.getSession();
             const token = data.session?.access_token;
-            return token ? {Authorization: `Bearer ${token}`} : {};
+            return token ? { Authorization: `Bearer ${token}` } : ({} as Record<string, string>);
         } catch (e) {
-            return {};
+            return {} as Record<string, string>;
         }
     }
 
@@ -291,7 +294,7 @@ export default function HomePage() {
                 setProjects([]);
             }
         } catch (error) {
-            console.error("Failed to load projects:", error);
+            logger.error("Failed to load projects:", error as any);
         }
     }
 
@@ -328,7 +331,7 @@ export default function HomePage() {
                 showToast(errorData.detail || "Failed to delete project", "error");
             }
         } catch (error) {
-            console.error("Failed to delete project:", error);
+            logger.error("Failed to delete project:", error as any);
             showToast("Failed to delete project. Please try again.", "error");
         } finally {
             setIsDeleting(false);
@@ -352,7 +355,7 @@ export default function HomePage() {
                 showToast(errorData.detail || "Failed to update project", "error");
             }
         } catch (error) {
-            console.error("Failed to update project:", error);
+            logger.error("Failed to update project:", error as any);
             showToast("Failed to update project. Please try again.", "error");
         }
     }
@@ -378,7 +381,7 @@ export default function HomePage() {
                 ]);
             }
         } catch (error) {
-            console.error("Image processing failed:", error);
+            logger.error("Image processing failed:", error as any);
             showToast("Failed to process image. Please try again.", "error");
         } finally {
             setIsUploading(false);
@@ -452,7 +455,7 @@ export default function HomePage() {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => null);
-                console.error("Failed to create project:", errorData);
+                logger.error("Failed to create project:", errorData as any);
                 showToast("Failed to create project", "error");
                 setIsCreatingProject(false);
                 return;
@@ -492,7 +495,7 @@ export default function HomePage() {
                             : uploadedPaths.join("\n");
                     }
                 } catch (uploadError) {
-                    console.error("Image upload failed:", uploadError);
+                    logger.error("Image upload failed:", uploadError as any);
                     showToast("Images could not be uploaded, but project was created", "error");
                 }
             }
@@ -510,10 +513,10 @@ export default function HomePage() {
                         }),
                     });
                     if (!actResponse.ok) {
-                        console.error("❌ ACT failed:", await actResponse.text());
+                        logger.error("❌ ACT failed:", await actResponse.text());
                     }
                 } catch (actError) {
-                    console.error("❌ ACT API error:", actError);
+                    logger.error("❌ ACT API error:", actError as any);
                 }
             }
 
@@ -522,7 +525,7 @@ export default function HomePage() {
             if (selectedModel) params.set("model", selectedModel);
             router.push(`/${project.id}/chat${params.toString() ? "?" + params.toString() : ""}`);
         } catch (error) {
-            console.error("Failed to create project:", error);
+            logger.error("Failed to create project:", error as any);
             showToast("Failed to create project", "error");
             setIsCreatingProject(false);
         }

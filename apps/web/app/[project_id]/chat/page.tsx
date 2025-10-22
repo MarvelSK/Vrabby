@@ -47,19 +47,24 @@ import ChatInput from '../../../components/chat/ChatInput';
 import {useUserRequests} from '../../../hooks/useUserRequests';
 import {useGlobalSettings} from '@/contexts/GlobalSettingsContext';
 import supabase from '@/lib/supabaseClient';
+import { logger } from '@/lib/logger';
+
+// Shadow console with our gated logger to avoid noisy logs when debug is off
+// TODO: Replace direct console.* calls with logger.* explicitly during refactors
+const console = logger as any;
 
 // 더 이상 ProjectSettings을 로드하지 않음 (메인 페이지에서 글로벌 설정으로 관리)
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
 // Auth helper: returns Authorization header for Supabase session if available
-async function getAuthHeaders() {
+async function getAuthHeaders(): Promise<Record<string, string>> {
     try {
-        const {data} = await supabase.auth.getSession();
+        const { data } = await supabase.auth.getSession();
         const token = data.session?.access_token;
-        return token ? {Authorization: `Bearer ${token}`} : {};
+        return token ? { Authorization: `Bearer ${token}` } : ({} as Record<string, string>);
     } catch {
-        return {};
+        return {} as Record<string, string>;
     }
 }
 

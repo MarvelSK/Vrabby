@@ -422,3 +422,20 @@ Development notes:
 - DATABASE_URL can use postgres:// or postgresql://; the system normalizes it for SQLAlchemy. The async engine auto-converts to postgresql+asyncpg.
 - Alembic migrations continue to use the sync engine; runtime routes can use async sessions concurrently.
 - New async dependency: app.api.deps_async.get_db_async yields an AsyncSession for use in async routes/services.
+
+
+
+### Debug mode
+
+You can enable verbose logs across the stack with a single flag:
+
+- Backend: set `DEBUG=true` (or `1/yes/on`) in `.env`.
+- Frontend: `scripts/setup-env.js` mirrors this to `apps/web/.env.local` as `NEXT_PUBLIC_DEBUG=true`.
+- Effects:
+  - Backend logging switches to debug/info and enables stdout stream handler; Uvicorn starts with `--log-level info`.
+  - Terminal UI (rich panels, ASCII logo, info/success messages) is shown only in debug; otherwise only warnings/errors are printed.
+  - Frontend `logger` wrapper gates all `console.*` calls so noisy logs only appear when `NEXT_PUBLIC_DEBUG=true`.
+
+Tips:
+- Keep `DEBUG=false` in production for minimal noise and better performance.
+- Toggle and re-run `npm run dev` to apply.

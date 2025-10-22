@@ -1,5 +1,6 @@
 "use client";
 import React, {createContext, useCallback, useContext, useEffect, useMemo, useState} from 'react';
+import { logger } from "@/lib/logger";
 
 export type GlobalAISettings = {
     default_cli: string;
@@ -46,8 +47,8 @@ export default function GlobalSettingsProvider({children}: { children: React.Rea
                 setSettings(s);
             }
         } catch (e) {
-            // Log once without throwing
-            console.warn('Failed to refresh global settings', e);
+            // Log once without throwing (only in debug mode)
+            logger.warn('Failed to refresh global settings', e as any);
         }
     }, [API_BASE]);
 

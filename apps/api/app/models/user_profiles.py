@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 class UserProfile(Base):
     __tablename__ = "user_profiles"
+    # TODO: Add tenant_id column and Alembic migration; enforce RLS policies in Supabase for tenant scoping
 
     # Supabase user id (matches auth user id)
     owner_id: Mapped[str] = mapped_column(String(128), primary_key=True, index=True)

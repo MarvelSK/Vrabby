@@ -11,6 +11,7 @@ from app.models.billing import UserAccount
 class BillingRepository:
     """Read-only repository for billing account data used by user profile enrichment."""
 
+    # TODO: Write smoke tests for get_account() querying by owner_id
     def __init__(self, db: AsyncSession):
         self.db = db
 

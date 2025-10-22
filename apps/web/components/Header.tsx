@@ -1,5 +1,5 @@
 "use client";
-import {useState} from 'react';
+import React, {useMemo, useState, memo} from 'react';
 import ProjectSettings from '@/components/ProjectSettings';
 import {usePathname} from 'next/navigation';
 import Image from 'next/image';
@@ -7,16 +7,20 @@ import {useTheme} from '@/components/ThemeProvider';
 import AuthMenu from "@/components/AuthMenu";
 import Link from 'next/link';
 
-export default function Header() {
+function Header() {
+    // TODO: Memoize heavy subcomponents and state to prevent unnecessary rerenders during navigation
+    // TODO: Make navigation tenant-aware once domain → tenant resolution is implemented
     const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
     const pathname = usePathname();
 
     // Extract project ID from pathname if we're in a project page
-    const projectId = pathname.match(/^\/([^\/]+)\/(chat|page)?$/)?.[1];
+    const projectId = useMemo(() => pathname.match(/^\/([^\/]+)\/(chat|page)?$/)?.[1], [pathname]);
 
     // Hide header on chat pages and main page (main page has its own header)
-    const isChatPage = pathname.includes('/chat');
-    const isMainPage = pathname === '/';
+    const { isChatPage, isMainPage } = useMemo(() => ({
+        isChatPage: pathname.includes('/chat'),
+        isMainPage: pathname === '/',
+    }), [pathname]);
     const theme = useTheme();
 
     if (isChatPage || isMainPage) {
@@ -81,3 +85,5 @@ export default function Header() {
         </header>
     );
 }
+
+export default memo(Header);

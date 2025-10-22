@@ -93,9 +93,12 @@ try {
 console.log(`Starting API server on http://localhost:${apiPort}...`);
 
 function spawnApi(py) {
+    const debugEnv = String(process.env.DEBUG || '').trim().toLowerCase();
+    const debugEnabled = ['1','true','yes','on'].includes(debugEnv);
+    const logLevel = debugEnabled ? 'info' : 'warning';
     return spawn(
         py,
-        ['-m', 'uvicorn', 'app.main:app', '--host', '0.0.0.0', '--port', apiPort.toString(), '--log-level', 'warning'],
+        ['-m', 'uvicorn', 'app.main:app', '--host', '0.0.0.0', '--port', apiPort.toString(), '--log-level', logLevel],
         {
             cwd: apiDir,
             stdio: 'inherit',

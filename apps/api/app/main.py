@@ -37,6 +37,7 @@ from app.core.error_handlers import register_exception_handlers
 
 app = FastAPI(title="Vrabby API")
 register_exception_handlers(app)
+# TODO: Add tenant resolution middleware based on request host (domain → tenant_id) and propagate via request.state.tenant_id
 
 # Middleware to suppress logging for specific endpoints
 class LogFilterMiddleware(BaseHTTPMiddleware):
@@ -59,6 +60,7 @@ class LogFilterMiddleware(BaseHTTPMiddleware):
 import threading, base64, json as _json
 from time import time as _time
 
+# TODO: Replace in-memory rate limiter with per-tenant, persistent store (e.g., Redis), using tenant context from middleware
 class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)

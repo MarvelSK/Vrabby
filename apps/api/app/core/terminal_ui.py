@@ -24,9 +24,16 @@ class LogLevel(Enum):
 
 
 class TerminalUI:
-    """Clean terminal interface without emojis"""
+    """Clean terminal interface without emojis.
 
+    Respects DEBUG env var (true/1/yes/on). When disabled, only WARNING/ERROR are shown.
+    """
+
+    # TODO: Add unit tests for DEBUG gating to ensure warnings/errors only when DEBUG=false
     def __init__(self):
+        import os
+        dbg = (os.getenv("DEBUG", "false") or "").strip().lower()
+        self.debug_enabled = dbg in ("1", "true", "yes", "on")
         self.console = Console(file=sys.stdout, force_terminal=True)
         self._setup_colors()
 
@@ -49,7 +56,10 @@ class TerminalUI:
         }
 
     def log(self, message: str, level: LogLevel = LogLevel.INFO, component: Optional[str] = None):
-        """Log a message with clean formatting"""
+        """Log a message with clean formatting (gated by debug)."""
+        # Only print warnings/errors when not in debug mode
+        if not self.debug_enabled and level in (LogLevel.DEBUG, LogLevel.INFO, LogLevel.SUCCESS):
+            return
         prefix = self.prefixes[level]
         color = self.colors[level]
 
@@ -82,7 +92,9 @@ class TerminalUI:
         self.log(message, LogLevel.ERROR, component)
 
     def panel(self, content: str, title: Optional[str] = None, style: str = "blue"):
-        """Display content in a clean panel"""
+        """Display content in a clean panel (debug only)"""
+        if not self.debug_enabled:
+            return
         panel = Panel(
             content,
             title=title,
@@ -93,7 +105,9 @@ class TerminalUI:
         self.console.print(panel)
 
     def ascii_logo(self):
-        """Display ASCII art logo for Vrabby"""
+        """Display ASCII art logo for Vrabby (debug only)"""
+        if not self.debug_enabled:
+            return
         # Create "Vrabby" logo with orange color from the image
         logo_text = Text()
 
@@ -124,7 +138,9 @@ class TerminalUI:
         self.console.print()  # Add blank line
 
     def status_line(self, items: Dict[str, str]):
-        """Display a status line with key-value pairs"""
+        """Display a status line with key-value pairs (debug only)"""
+        if not self.debug_enabled:
+            return
         table = Table.grid(padding=1)
 
         for key, value in items.items():

@@ -102,6 +102,8 @@ async function setupEnvironment() {
             const envContent = `# Auto-generated environment configuration
 API_PORT=${apiPort}
 WEB_PORT=${webPort}
+# Debug logging (set to true/1 to enable verbose logs in backend and frontend)
+DEBUG=false
 # Set your Supabase Postgres URL here (required)
 # Example: DATABASE_URL=postgresql://postgres.YOUR_USER:YOUR_PASSWORD@YOUR_HOST:5432/postgres?sslmode=require
 # Note: You can also use postgres://… — the app will normalize it automatically
@@ -116,12 +118,23 @@ DATABASE_URL=
         const desiredApiBase = `http://localhost:${apiPort}`;
         const desiredWsBase = `ws://localhost:${apiPort}`;
 
+        // Determine debug flag from root .env (if present)
+        let debugEnabledForWeb = false;
+        try {
+            if (fs.existsSync(envFile)) {
+                const prev = fs.readFileSync(envFile, 'utf8');
+                const m = prev.match(/^DEBUG=(.*)$/m);
+                const raw = (m && m[1] ? m[1].trim() : 'false');
+                debugEnabledForWeb = /^(1|true|yes|on)$/i.test(raw);
+            }
+        } catch (_) {}
+
         const writeEnvLocal = (content) => {
             fs.writeFileSync(webEnvFile, content);
         };
 
         if (!fs.existsSync(webEnvFile)) {
-            const webEnvContent = `# Auto-generated environment configuration\nNEXT_PUBLIC_API_BASE=${desiredApiBase}\nNEXT_PUBLIC_WS_BASE=${desiredWsBase}\n`;
+            const webEnvContent = `# Auto-generated environment configuration\nNEXT_PUBLIC_API_BASE=${desiredApiBase}\nNEXT_PUBLIC_WS_BASE=${desiredWsBase}\nNEXT_PUBLIC_DEBUG=${debugEnabledForWeb ? 'true' : 'false'}\n`;
             writeEnvLocal(webEnvContent);
             console.log(`  Created apps/web/.env.local`);
         } else {
@@ -141,9 +154,10 @@ DATABASE_URL=
 
             setOrAdd('NEXT_PUBLIC_API_BASE', desiredApiBase);
             setOrAdd('NEXT_PUBLIC_WS_BASE', desiredWsBase);
+            setOrAdd('NEXT_PUBLIC_DEBUG', debugEnabledForWeb ? 'true' : 'false');
 
             // Deduplicate these keys, keeping the last occurrence
-            const keysToDedup = ['NEXT_PUBLIC_API_BASE', 'NEXT_PUBLIC_WS_BASE'];
+            const keysToDedup = ['NEXT_PUBLIC_API_BASE', 'NEXT_PUBLIC_WS_BASE', 'NEXT_PUBLIC_DEBUG'];
             const lines = contents.split(/\r?\n/);
             const seen = new Set();
             const result = [];
@@ -195,6 +209,7 @@ if (require.main === module) {
 
 const {execSync} = require('child_process');
 
+// Optional port-freeing on Windows; enable by setting FREE_PORTS_ON_SETUP=true
 function freePort(port) {
     try {
         const output = execSync(`netstat -ano | findstr :${port}`).toString();
@@ -207,8 +222,10 @@ function freePort(port) {
     }
 }
 
-freePort(8080);
-freePort(3000);
-
+const SHOULD_FREE = /^(1|true|yes|on)$/i.test(process.env.FREE_PORTS_ON_SETUP || '');
+if (SHOULD_FREE) {
+    freePort(8080);
+    freePort(3000);
+}
 
 module.exports = {setupEnvironment, findAvailablePort};

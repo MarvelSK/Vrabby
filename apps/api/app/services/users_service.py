@@ -31,6 +31,7 @@ class UsersService:
     Keeps route handlers thin and testable.
     """
 
+    # TODO: Add async unit tests for UsersService: get_me, update_me, and record_event flows
     def __init__(self, db: AsyncSession):
         self.db = db
         self.users_repo = UsersRepository(db)

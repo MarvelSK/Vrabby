@@ -760,6 +760,7 @@ export default function GlobalSettings({isOpen, onClose, initialTab = 'general'}
                                     {(() => {
                                         const year = new Date().getFullYear().toString().slice(-1); // "5"
                                         const month = (new Date().getMonth() + 1).toString().padStart(2, "0"); // "10"
+                                        // TODO: Auto-generate version from package.json or git tag instead of manual patch increment
                                         const patch = 3; // manually change this when you push new update
                                         const version = `${year}.${month}.${patch}`;
                                         return (

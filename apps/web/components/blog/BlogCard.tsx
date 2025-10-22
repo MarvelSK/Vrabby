@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import Link from "next/link";
 
 export type BlogPost = {
   id: string;
@@ -25,9 +26,9 @@ export default function BlogCard({ post }: { post: BlogPost }) {
       <div className="min-w-0 flex-1">
         <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
           {href ? (
-            <a href={href} className="hover:underline">
+            <Link href={href} className="hover:underline">
               {post.title}
-            </a>
+            </Link>
           ) : (
             post.title
           )}
