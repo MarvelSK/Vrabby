@@ -459,11 +459,18 @@ export default function ChatPage({params}: Params) {
         }, 300);
     }, [searchParams]);
 
+    const cliStatusThrottleRef = useRef<{ inFlight: boolean; last: number }>({ inFlight: false, last: 0 });
     const loadCliStatuses = useCallback(async () => {
         if (!projectId) return;
+        const now = Date.now();
+        // Throttle to avoid hammering API (min 4s between loads) and skip if already in flight
+        if (cliStatusThrottleRef.current.inFlight || (now - cliStatusThrottleRef.current.last) < 4000) {
+            return;
+        }
+        cliStatusThrottleRef.current.inFlight = true;
         try {
             const headers = await getAuthHeaders();
-            const response = await fetch(`${API_BASE}/api/chat/${projectId}/cli-status`, {headers});
+            const response = await fetch(`${API_BASE}/api/chat/${projectId}/cli-status`, { headers });
             if (!response.ok) throw new Error('Failed to load CLI statuses');
 
             const data = await response.json();
@@ -479,8 +486,11 @@ export default function ChatPage({params}: Params) {
             });
             setCliStatuses(snapshot);
         } catch (error) {
-            console.error('Failed to load CLI statuses:', error);
+            logger.debug('Failed to load CLI statuses:', error as any);
             setCliStatuses({});
+        } finally {
+            cliStatusThrottleRef.current.inFlight = false;
+            cliStatusThrottleRef.current.last = Date.now();
         }
     }, [projectId]);
 
@@ -538,15 +548,22 @@ export default function ChatPage({params}: Params) {
                 const cliLabel = CLI_LABELS[targetCli] || targetCli;
                 const modelLabel = getModelDisplayName(targetCli, resolvedModel);
                 try {
-                    await fetch(`${API_BASE}/api/chat/${projectId}/messages`, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json', ...headers},
-                        body: JSON.stringify({
-                            content: `Switched to ${cliLabel} (${modelLabel})`,
-                            role: 'system',
-                            conversation_id: conversationId || undefined
-                        })
-                    });
+                    const sig = `${targetCli}:${resolvedModel}`;
+                    const now = Date.now();
+                    const last = lastModelAnnouncementRef.current;
+                    // Deduplicate rapid consecutive announcements of the same CLI/model within 15s
+                    if (!last || last.sig !== sig || (now - last.ts) > 15000) {
+                        lastModelAnnouncementRef.current = { sig, ts: now };
+                        await fetch(`${API_BASE}/api/chat/${projectId}/messages`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json', ...headers},
+                            body: JSON.stringify({
+                                content: `Switched to ${cliLabel} (${modelLabel})`,
+                                role: 'system',
+                                conversation_id: conversationId || undefined
+                            })
+                        });
+                    }
                 } catch (messageError) {
                     console.warn('Failed to record model switch message:', messageError);
                 }
@@ -699,6 +716,9 @@ export default function ChatPage({params}: Params) {
         }
     }, [projectId]);
 
+    const lastDeploymentStatusRef = useRef<string | null>(null);
+    const lastModelAnnouncementRef = useRef<{sig: string; ts: number} | null>(null);
+
     const startDeploymentPolling = useCallback((depId: string) => {
         if (deployPollRef.current) clearInterval(deployPollRef.current);
         setDeploymentStatus('deploying');
@@ -706,6 +726,8 @@ export default function ChatPage({params}: Params) {
 
         console.log('🔍 Monitoring deployment:', depId);
 
+        // Reset last observed status at the start of polling
+        lastDeploymentStatusRef.current = null;
         deployPollRef.current = setInterval(async () => {
             try {
                 const headers = await getAuthHeaders();
@@ -741,8 +763,9 @@ export default function ChatPage({params}: Params) {
                 const status = data.status;
 
                 // Log only status changes
-                if (status && status !== 'QUEUED') {
+                if (status && status !== lastDeploymentStatusRef.current) {
                     console.log('🔍 Deployment status:', status);
+                    lastDeploymentStatusRef.current = status;
                 }
 
                 // Check if deployment is ready or failed
@@ -790,7 +813,7 @@ export default function ChatPage({params}: Params) {
             } catch (error) {
                 console.error('🔍 Polling error:', error);
             }
-        }, 1000); // 1초 간격으로 변경
+        }, 3000); // 3초 간격으로 줄여 서버 부하 감소
     }, [projectId]);
 
     async function start() {
@@ -1237,7 +1260,8 @@ export default function ChatPage({params}: Params) {
 
     async function loadProjectInfo() {
         try {
-            const r = await fetch(`${API_BASE}/api/projects/${projectId}`);
+            const headers = await getAuthHeaders();
+            const r = await fetch(`${API_BASE}/api/projects/${projectId}`, { headers });
             if (r.ok) {
                 const project = await r.json();
                 console.log('📋 Loading project info:', {

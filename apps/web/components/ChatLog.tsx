@@ -6,6 +6,7 @@ import {useWebSocket} from '../hooks/useWebSocket';
 import {Brain} from 'lucide-react';
 import ToolResultItem from './ToolResultItem';
 import ThinkingSection from './chat/ThinkingSection';
+import { logger } from '@/lib/logger';
 
 // Tool Message Component - Enhanced with new design
 const ToolMessage = ({content, metadata}: {
@@ -236,7 +237,7 @@ export default function ChatLog({
         onDisconnect: () => {
         },
         onError: (error) => {
-            console.error('🔌 [WebSocket] Error:', error);
+            logger.debug('🔌 [WebSocket] Error:', error as any);
         }
     });
 
@@ -320,7 +321,7 @@ export default function ChatLog({
                     }
                 }
             } catch (error) {
-                console.error('Error polling session status:', error);
+                logger.debug('Error polling session status:', error as any);
             }
         }, 3000); // Poll every 3 seconds
     };
@@ -335,7 +336,7 @@ export default function ChatLog({
                 setMessages(chatMessages);
             }
         } catch (error) {
-            console.error('Failed to load chat history:', error);
+            logger.debug('Failed to load chat history:', error as any);
         } finally {
             setIsLoading(false);
         }
@@ -878,14 +879,14 @@ export default function ChatLog({
                                                                 {(() => {
                                                                     // Use attachments from metadata if available, otherwise fallback to parsed paths
                                                                     const attachments = message.metadata_json?.attachments || [];
-                                                                    console.log('🖼️ Message metadata:', message.metadata_json);
-                                                                    console.log('🖼️ Attachments found:', attachments);
+                                                                    logger.debug('🖼️ Message metadata:', message.metadata_json);
+                                                                    logger.debug('🖼️ Attachments found:', attachments);
                                                                     if (attachments.length > 0) {
                                                                         return (
                                                                             <div className="mt-2 flex flex-wrap gap-2">
                                                                                 {attachments.map((attachment: any, idx: number) => {
                                                                                     const imageUrl = `${API_BASE}${attachment.url}`;
-                                                                                    console.log('🔗 Image URL:', imageUrl, 'for attachment:', attachment);
+                                                                                    logger.debug('🔗 Image URL:', imageUrl, 'for attachment:', attachment);
                                                                                     return (
                                                                                         <div key={idx}
                                                                                              className="relative group">
@@ -898,7 +899,7 @@ export default function ChatLog({
                                                                                                     onError={(e) => {
                                                                                                         // Fallback to icon if image fails to load
                                                                                                         const target = e.target as HTMLImageElement;
-                                                                                                        console.error('❌ Image failed to load:', target.src, 'Error:', e);
+                                                                                                        logger.debug('❌ Image failed to load:', target.src, 'Error:', e as any);
                                                                                                         target.style.display = 'none';
                                                                                                         const parent = target.parentElement;
                                                                                                         if (parent) {

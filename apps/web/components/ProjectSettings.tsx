@@ -231,7 +231,11 @@ export default function ProjectSettings({
 
     const loadProjectInfo = async () => {
         try {
-            const response = await fetch(`${API_BASE}/api/projects/${projectId}`);
+            // Attach Supabase session token if available
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData.session?.access_token;
+            const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+            const response = await fetch(`${API_BASE}/api/projects/${projectId}`, { headers });
             if (response.ok) {
                 const data = await response.json();
                 setProjectInfo(data);

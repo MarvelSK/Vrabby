@@ -79,10 +79,15 @@ async def start_preview(
 
     # Start preview
     process_name, port = start_preview_process(project_id, repo_path, port=body.port)
+    # Build URL using IPv4 loopback by default to avoid IPv6/localhost resolution issues on Windows
+    host = os.getenv("PREVIEW_PUBLIC_HOST", os.getenv("PREVIEW_BIND", "127.0.0.1")).strip()
+    if host in ("0.0.0.0", "::", "::1"):
+        # Do not expose wildcard to iframe; use loopback access URL
+        host = "127.0.0.1"
     result = {
         "success": True,
         "port": port,
-        "url": f"http://localhost:{port}",
+        "url": f"http://{host}:{port}",
         "process_name": process_name
     }
 
@@ -215,10 +220,13 @@ async def restart_preview(
 
     # Start preview
     process_name, port = start_preview_process(project_id, repo_path, port=body.port)
+    host = os.getenv("PREVIEW_PUBLIC_HOST", os.getenv("PREVIEW_BIND", "127.0.0.1")).strip()
+    if host in ("0.0.0.0", "::", "::1"):
+        host = "127.0.0.1"
     result = {
         "success": True,
         "port": port,
-        "url": f"http://localhost:{port}",
+        "url": f"http://{host}:{port}",
         "process_name": process_name
     }
 

@@ -22,6 +22,10 @@ async def websocket_endpoint(websocket: WebSocket, project_id: str):
         while True:
             try:
                 data = await websocket.receive_text()
+                # Lightweight keepalive: reply to ping without noisy logs
+                if isinstance(data, str) and data.strip().lower() == 'ping':
+                    await websocket.send_text('pong')
+                    continue
                 ui.debug(f"Received data: {data}", "WebSocket")
                 # Handle incoming WebSocket messages if needed
                 # For now, we just maintain the connection

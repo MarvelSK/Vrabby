@@ -239,6 +239,16 @@ def _is_port_free(port: int) -> bool:
         return sock.connect_ex(("127.0.0.1", port)) != 0
 
 
+def _is_port_listening(port: int, host: str = "127.0.0.1") -> bool:
+    """Return True if something is listening on host:port."""
+    try:
+        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+            sock.settimeout(0.3)
+            return sock.connect_ex((host, port)) == 0
+    except Exception:
+        return False
+
+
 def find_free_preview_port() -> int:
     """Find a free port in the preview range"""
     for port in range(settings.preview_port_start, settings.preview_port_end + 1):
@@ -424,18 +434,36 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
             popen_kwargs["preexec_fn"] = os.setsid  # Unix: new process group
         elif os.name == 'nt':
             popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+        # Determine bind host for dev server (default IPv4 loopback)
+        host = os.getenv("PREVIEW_BIND", "127.0.0.1")
         process = subprocess.Popen(
-            [npm_cmd, "run", "dev", "--", "-p", str(port)],
+            [npm_cmd, "run", "dev", "--", "-p", str(port), "-H", host],
             **popen_kwargs
         )
 
-        # Wait a moment for the server to start
-        time.sleep(2)
-
-        # Check if process is still running
-        if process.poll() is not None:
-            stdout, _ = process.communicate()
-            raise RuntimeError(f"Next.js server failed to start: {stdout}")
+        # Proactively wait until the dev server is actually listening to avoid iframe race conditions
+        readiness_timeout = float(os.getenv("PREVIEW_READINESS_TIMEOUT_SEC", "45") or 45)
+        start_ts = time.time()
+        # Use a concrete loopback address for readiness checks when binding to wildcard
+        check_host = "127.0.0.1" if host in ("0.0.0.0", "::", "::1") else host
+        while True:
+            # If process exited early, surface logs and fail fast
+            if process.poll() is not None:
+                stdout = ""
+                try:
+                    if process.stdout:
+                        try:
+                            stdout = process.stdout.read() or ""
+                        except Exception:
+                            stdout = ""
+                except Exception:
+                    pass
+                raise RuntimeError(f"Next.js server failed to start (early exit). Logs:\n{stdout}")
+            if _is_port_listening(port, check_host):
+                break
+            if (time.time() - start_ts) > readiness_timeout:
+                raise RuntimeError(f"Next.js server did not become ready on {host}:{port} within {int(readiness_timeout)}s")
+            time.sleep(0.25)
 
         # Start error monitoring thread
         error_thread = threading.Thread(

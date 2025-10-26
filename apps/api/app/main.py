@@ -67,9 +67,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.lock = threading.Lock()
         self.buckets = {}  # key -> {"minute": (window_start_ts, count), "day": (window_start_ts, count)}
 
+    def _tenant_id(self, request: Request) -> str:
+        # Derive tenant from explicit header or from Host (subdomain)
+        tid = (request.headers.get("X-Tenant-ID") or "").strip()
+        if tid:
+            return tid
+        host = (request.headers.get("host") or request.headers.get("Host") or "").split(":")[0]
+        # naive subdomain parsing: sub.domain.tld -> sub
+        if host and host.count(".") >= 2:
+            return host.split(".")[0]
+        return "default"
+
     def _key_for(self, request: Request) -> str:
         # Prefer Supabase user id from unverified JWT for lightweight keying
         auth = request.headers.get("authorization") or request.headers.get("Authorization")
+        tenant = self._tenant_id(request)
         if auth and auth.lower().startswith("bearer "):
             token = auth.split(" ", 1)[1].strip()
             parts = token.split('.')
@@ -79,18 +91,29 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     payload = _json.loads(base64.urlsafe_b64decode(payload_b64).decode('utf-8'))
                     sub = payload.get('sub') or payload.get('user_id')
                     if sub:
-                        return f"uid:{sub}"
+                        return f"t:{tenant}|uid:{sub}"
                 except Exception:
                     pass
         # Fallback to IP
         ip = request.client.host if request.client else 'unknown'
-        return f"ip:{ip}"
+        return f"t:{tenant}|ip:{ip}"
 
     async def dispatch(self, request: Request, call_next):
+        # Skip rate limiting for WebSocket upgrades
+        if request.headers.get("upgrade", "").lower() == "websocket":
+            return await call_next(request)
+
         key = self._key_for(request)
         now = _time()
         minute_window = 60.0
         day_window = 86400.0
+
+        # Method-aware limits (allow higher read throughput for GET)
+        is_get = (request.method.upper() == 'GET')
+        base_min_limit = settings.rate_limit_per_min
+        m_limit_effective = base_min_limit * (5 if is_get else 1)
+        d_limit = settings.rate_limit_per_day
+
         with self.lock:
             data = self.buckets.get(key, {"minute": (now, 0), "day": (now, 0)})
             m_start, m_count = data["minute"]
@@ -101,16 +124,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             if now - d_start >= day_window:
                 d_start, d_count = now, 0
             # Apply limits
-            m_limit = settings.rate_limit_per_min
-            d_limit = settings.rate_limit_per_day
-            if m_count + 1 > m_limit or d_count + 1 > d_limit:
+            if m_count + 1 > m_limit_effective or d_count + 1 > d_limit:
                 # Return 429 with headers
                 from starlette.responses import JSONResponse
-                retry_after = int(max(1, minute_window - (now - m_start))) if m_count + 1 > m_limit else int(max(1, day_window - (now - d_start)))
+                retry_after = int(max(1, minute_window - (now - m_start))) if m_count + 1 > m_limit_effective else int(max(1, day_window - (now - d_start)))
                 headers = {
                     "Retry-After": str(retry_after),
-                    "X-RateLimit-Limit-Minute": str(m_limit),
-                    "X-RateLimit-Remaining-Minute": str(max(0, m_limit - m_count)),
+                    "X-RateLimit-Limit-Minute": str(m_limit_effective),
+                    "X-RateLimit-Remaining-Minute": str(max(0, int(m_limit_effective - m_count))),
                     "X-RateLimit-Limit-Day": str(d_limit),
                     "X-RateLimit-Remaining-Day": str(max(0, d_limit - d_count)),
                 }
@@ -124,8 +145,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         # Expose remaining counts
         try:
-            response.headers["X-RateLimit-Limit-Minute"] = str(settings.rate_limit_per_min)
-            response.headers["X-RateLimit-Limit-Day"] = str(settings.rate_limit_per_day)
+            response.headers["X-RateLimit-Limit-Minute"] = str(m_limit_effective)
+            response.headers["X-RateLimit-Limit-Day"] = str(d_limit)
         except Exception:
             pass
         return response

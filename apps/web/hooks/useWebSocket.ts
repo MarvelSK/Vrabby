@@ -3,6 +3,7 @@
  * Manages WebSocket connection for real-time updates
  */
 import {useEffect, useRef, useCallback, useState} from 'react';
+import { logger } from '@/lib/logger';
 import {Message} from '@/types/chat';
 
 interface WebSocketOptions {
@@ -26,6 +27,7 @@ export function useWebSocket({
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const connectionAttemptsRef = useRef(0);
     const shouldReconnectRef = useRef(true);
+    const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const [isConnected, setIsConnected] = useState(false);
 
     const connect = useCallback(() => {
@@ -46,6 +48,15 @@ export function useWebSocket({
             ws.onopen = () => {
                 setIsConnected(true);
                 connectionAttemptsRef.current = 0;
+                // Start lightweight keepalive pings to prevent idle timeouts
+                if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+                pingIntervalRef.current = setInterval(() => {
+                    try {
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send('ping');
+                        }
+                    } catch {}
+                }, 25000);
                 onConnect?.();
             };
 
@@ -76,20 +87,26 @@ export function useWebSocket({
                     } else {
                     }
                 } catch (error) {
-                    console.error('Failed to parse WebSocket message:', error);
+                    logger.debug('Failed to parse WebSocket message:', error as any);
                 }
             };
 
             ws.onerror = (error) => {
-                console.error('❌ WebSocket error:', error);
-                console.error('❌ WebSocket readyState:', ws.readyState);
-                console.error('❌ WebSocket URL:', ws.url);
+                logger.debug('❌ WebSocket error:', error as any);
+                logger.debug('❌ WebSocket readyState:', ws.readyState);
+                logger.debug('❌ WebSocket URL:', ws.url);
                 onError?.(new Error(`WebSocket connection error to ${ws.url}`));
             };
 
             ws.onclose = () => {
                 setIsConnected(false);
                 onDisconnect?.();
+
+                // Stop keepalive pings
+                if (pingIntervalRef.current) {
+                    clearInterval(pingIntervalRef.current);
+                    pingIntervalRef.current = null;
+                }
 
                 // Only reconnect if we should and haven't exceeded attempts
                 if (shouldReconnectRef.current) {
@@ -107,7 +124,7 @@ export function useWebSocket({
 
             wsRef.current = ws;
         } catch (error) {
-            console.error('Failed to create WebSocket connection:', error);
+            logger.debug('Failed to create WebSocket connection:', error as any);
             onError?.(error as Error);
         }
     }, [projectId, onMessage, onStatus, onConnect, onDisconnect, onError]);
@@ -117,6 +134,12 @@ export function useWebSocket({
 
         if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
+        }
+
+        // Stop keepalive pings
+        if (pingIntervalRef.current) {
+            clearInterval(pingIntervalRef.current);
+            pingIntervalRef.current = null;
         }
 
         if (wsRef.current) {
@@ -138,9 +161,13 @@ export function useWebSocket({
     useEffect(() => {
         shouldReconnectRef.current = true;
         connectionAttemptsRef.current = 0;
-        connect();
+        // Delay initial connect slightly to avoid React StrictMode double-invocation churn
+        const timer = setTimeout(() => {
+            connect();
+        }, 200);
 
         return () => {
+            clearTimeout(timer);
             disconnect();
         };
     }, [projectId]);

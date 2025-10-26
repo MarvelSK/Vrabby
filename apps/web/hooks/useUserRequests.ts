@@ -1,4 +1,5 @@
 import {useState, useCallback, useEffect, useRef} from 'react';
+import { logger } from '@/lib/logger';
 
 interface UseUserRequestsOptions {
     projectId: string;
@@ -48,14 +49,12 @@ export function useUserRequests({projectId}: UseUserRequestsOptions) {
 
                 // 활성 상태가 변경되었을 때만 로그 출력
                 if (data.hasActiveRequests !== previousActiveState.current) {
-                    console.log(`🔄 [UserRequests] Active requests: ${data.hasActiveRequests} (count: ${data.activeCount})`);
+                    logger.debug(`🔄 [UserRequests] Active requests: ${data.hasActiveRequests} (count: ${data.activeCount})`);
                     previousActiveState.current = data.hasActiveRequests;
                 }
             }
         } catch (error) {
-            if (process.env.NODE_ENV === 'development') {
-                console.error('[UserRequests] Failed to check active requests:', error);
-            }
+            logger.debug('[UserRequests] Failed to check active requests:', error as any);
         }
     }, [projectId, isTabVisible]);
 
@@ -71,7 +70,7 @@ export function useUserRequests({projectId}: UseUserRequestsOptions) {
         }
 
         // 활성 요청 상태에 따른 폴링 간격 결정
-        const pollInterval = hasActiveRequests ? 500 : 5000; // 0.5초 vs 5초
+        const pollInterval = hasActiveRequests ? 1000 : 5000; // 1s when active, 5s when idle (aligns with backend rate limits)
 
         // 기존 폴링 정리
         if (intervalRef.current) {
@@ -84,9 +83,7 @@ export function useUserRequests({projectId}: UseUserRequestsOptions) {
         // 새로운 폴링 시작
         intervalRef.current = setInterval(checkActiveRequests, pollInterval);
 
-        if (process.env.NODE_ENV === 'development') {
-            console.log(`⏱️ [UserRequests] Polling interval: ${pollInterval}ms (active: ${hasActiveRequests})`);
-        }
+        logger.debug(`⏱️ [UserRequests] Polling interval: ${pollInterval}ms (active: ${hasActiveRequests})`);
 
         return () => {
             if (intervalRef.current) {
@@ -113,7 +110,7 @@ export function useUserRequests({projectId}: UseUserRequestsOptions) {
     ) => {
         // 즉시 폴링으로 상태 확인
         checkActiveRequests();
-        console.log(`🔄 [UserRequests] Created request: ${requestId}`);
+        logger.debug(`🔄 [UserRequests] Created request: ${requestId}`);
     }, [checkActiveRequests]);
 
     const startRequest = useCallback((requestId: string) => {

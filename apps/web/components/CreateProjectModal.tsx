@@ -3,6 +3,7 @@ import {useState, useEffect} from 'react';
 import {useRouter} from 'next/navigation';
 import {AnimatePresence} from 'framer-motion';
 import {MotionDiv, MotionP} from '../lib/motion';
+import { logger } from '@/lib/logger';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 const WS_BASE = process.env.NEXT_PUBLIC_WS_BASE || 'ws://localhost:8080';
@@ -337,7 +338,7 @@ export default function CreateProjectModal({open, onClose, onCreated, onOpenGlob
                         }
                     }
                 } catch (error) {
-                    console.error('Failed to parse WebSocket message:', error);
+                    logger.debug('Failed to parse WebSocket message:', error as any);
                 }
             };
 
@@ -347,7 +348,7 @@ export default function CreateProjectModal({open, onClose, onCreated, onOpenGlob
                 if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
                     reconnectAttempts++;
                     const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 10000); // Exponential backoff, max 10s
-                    console.log(`🔄 Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
+                    logger.debug(`🔄 Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
 
                     reconnectTimeout = setTimeout(() => {
                         connect();

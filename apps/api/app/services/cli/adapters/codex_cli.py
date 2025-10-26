@@ -71,21 +71,21 @@ class CodexCLI(BaseCLI):
 
     async def check_availability(self) -> Dict[str, Any]:
         """Check if Codex CLI is available"""
-        print(f"[DEBUG] CodexCLI.check_availability called")
+        ui.debug("CodexCLI.check_availability called", "Codex")
         try:
             codex_exe = self._locate_codex_executable()
             if not codex_exe:
                 error_msg = (
                     "Codex CLI not found on PATH. Install with `npm install -g @openai/codex` and ensure the npm bin directory is on PATH."
                 )
-                print(f"[DEBUG] {error_msg}")
+                ui.debug(error_msg, "Codex")
                 return {
                     "available": False,
                     "configured": False,
                     "error": error_msg,
                 }
 
-            print(f"[DEBUG] Running command: {codex_exe} --version")
+            ui.debug(f"Running command: {codex_exe} --version", "Codex")
             env = self._augment_path(os.environ.copy())
             cmd = self._build_invocation(codex_exe, "--version")
             result = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE,
