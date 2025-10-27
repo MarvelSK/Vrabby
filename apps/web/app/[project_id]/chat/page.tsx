@@ -495,10 +495,10 @@ export default function ChatPage({params}: Params) {
     }, [projectId]);
 
     const handleModelChange = useCallback(
-        async (option: ModelOption, opts?: { skipCliUpdate?: boolean; overrideCli?: string; announce?: boolean }) => {
+        async (option: ModelOption, opts?: { skipCliUpdate?: boolean; overrideCli?: string }) => {
             if (!projectId || !option) return;
 
-            const {skipCliUpdate = false, overrideCli, announce = true} = opts || {};
+            const {skipCliUpdate = false, overrideCli} = opts || {};
             const targetCli = overrideCli ?? option.cli;
             const newModelId = option.id;
 
@@ -548,23 +548,21 @@ export default function ChatPage({params}: Params) {
                 const cliLabel = CLI_LABELS[targetCli] || targetCli;
                 const modelLabel = getModelDisplayName(targetCli, resolvedModel);
                 try {
-                    if (announce) {
-                        const sig = `${targetCli}:${resolvedModel}`;
-                        const now = Date.now();
-                        const last = lastModelAnnouncementRef.current;
-                        // Deduplicate rapid consecutive announcements of the same CLI/model within 15s
-                        if (!last || last.sig !== sig || (now - last.ts) > 15000) {
-                            lastModelAnnouncementRef.current = { sig, ts: now };
-                            await fetch(`${API_BASE}/api/chat/${projectId}/messages`, {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json', ...headers},
-                                body: JSON.stringify({
-                                    content: `Switched to ${cliLabel} (${modelLabel})`,
-                                    role: 'system',
-                                    conversation_id: conversationId || undefined
-                                })
-                            });
-                        }
+                    const sig = `${targetCli}:${resolvedModel}`;
+                    const now = Date.now();
+                    const last = lastModelAnnouncementRef.current;
+                    // Deduplicate rapid consecutive announcements of the same CLI/model within 15s
+                    if (!last || last.sig !== sig || (now - last.ts) > 15000) {
+                        lastModelAnnouncementRef.current = { sig, ts: now };
+                        await fetch(`${API_BASE}/api/chat/${projectId}/messages`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json', ...headers},
+                            body: JSON.stringify({
+                                content: `Switched to ${cliLabel} (${modelLabel})`,
+                                role: 'system',
+                                conversation_id: conversationId || undefined
+                            })
+                        });
                     }
                 } catch (messageError) {
                     console.warn('Failed to record model switch message:', messageError);
@@ -639,14 +637,14 @@ export default function ChatPage({params}: Params) {
 
     useEffect(() => {
         if (!modelOptions.length) return;
-        // Only auto-select a fallback if no model is currently selected at all.
-        if (!selectedModel) {
+        const hasSelected = modelOptions.some(option => option.cli === preferredCli && option.id === selectedModel);
+        if (!hasSelected) {
             const fallbackOption = modelOptions.find(option => option.cli === preferredCli && option.available)
                 || modelOptions.find(option => option.cli === preferredCli)
                 || modelOptions.find(option => option.available)
                 || modelOptions[0];
             if (fallbackOption) {
-                void handleModelChange(fallbackOption, { announce: false });
+                void handleModelChange(fallbackOption);
             }
         }
     }, [modelOptions, preferredCli, selectedModel, handleModelChange]);

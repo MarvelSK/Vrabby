@@ -52,15 +52,11 @@ MODEL_MAPPING: Dict[str, Dict[str, str]] = {
         "sonnet-4.5": "claude-sonnet-4-5-20250929",
         "opus-4": "claude-opus-4-20250514",
         "haiku-3.5": "claude-3-5-haiku-20241022",
-        # Anticipated/alias names mapped to closest supported models
-        "haiku-4.5": "claude-3-5-haiku-20241022",  # map to latest Haiku available
         # Handle claude-prefixed model names
         "claude-sonnet-4.5": "claude-sonnet-4-5-20250929",
         "claude-opus-4.1": "claude-opus-4-1-20250805",
         "claude-opus-4": "claude-opus-4-20250514",
         "claude-haiku-3.5": "claude-3-5-haiku-20241022",
-        "claude-haiku-4.5": "claude-3-5-haiku-20241022",  # UI may request this; map to supported
-        "claude-haiku-4-5-20251001": "claude-3-5-haiku-20241022",  # UI alias fallback
         # Support direct full model names
         "claude-opus-4-1-20250805": "claude-opus-4-1-20250805",
         "claude-sonnet-4-5-20250929": "claude-sonnet-4-5-20250929",

@@ -136,11 +136,7 @@ class ClaudeCodeCLI(BaseCLI):
             trimmed_system_prompt = full_system_prompt
 
         # Get CLI-specific model name
-        try:
-            from app.services.claude_act import DEFAULT_MODEL as _DEFAULT_CLAUDE_MODEL
-        except Exception:
-            _DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
-        cli_model = self._get_cli_model_name(model) or _DEFAULT_CLAUDE_MODEL
+        cli_model = self._get_cli_model_name(model) or "claude-sonnet-4-5-20250929"
 
         # Add project directory structure for initial prompts
         if is_initial_prompt:
