@@ -94,7 +94,7 @@ class ClaudeCodeCLI(BaseCLI):
     ) -> AsyncGenerator[Message, None]:
         """Execute instruction using Claude Code Python SDK"""
 
-        ui.info("Starting Claude SDK execution", "Claude SDK")
+        ui.info("Starting Vrabby execution", "Vrabby")
         ui.debug(f"Instruction: {instruction[:100]}...", "Claude SDK")
         ui.debug(f"Project path: {project_path}", "Claude SDK")
         ui.debug(f"Session ID: {session_id}", "Claude SDK")
@@ -106,13 +106,9 @@ class ClaudeCodeCLI(BaseCLI):
         try:
             from app.services.claude_act import get_system_prompt
 
-            system_prompt = get_system_prompt()
+            system_prompt = get_system_prompt(first_run=is_initial_prompt)
             ui.debug(f"System prompt loaded: {len(system_prompt)} chars", "Claude SDK")
             full_system_prompt = system_prompt
-
-            # Windows has an 8191 character command-line limit when prompts are passed
-            # via command arguments. We'll only trim in fallback scenarios where we
-            # cannot use a temporary settings file.
             trimmed_system_prompt = system_prompt
             if os.name == "nt":
                 max_prompt_chars = 3000
@@ -132,12 +128,19 @@ class ClaudeCodeCLI(BaseCLI):
         except Exception as e:
             ui.error(f"Failed to load system prompt: {e}", "Claude SDK")
             full_system_prompt = (
-                "You are Claude Code, an AI coding assistant specialized in building modern web applications."
+                "You are Vrabby, an advanced AI coding assistant created by Marek Vrábel, "
+                "founder of MHost.sk. You specialize in building modern fullstack web applications "
+                "with high-quality code, performance, and design. Use Next.js, TypeScript, and Tailwind "
+                "best practices. Maintain clarity, accessibility, and production-readiness."
             )
             trimmed_system_prompt = full_system_prompt
 
         # Get CLI-specific model name
-        cli_model = self._get_cli_model_name(model) or "claude-sonnet-4-5-20250929"
+        try:
+            from app.services.claude_act import DEFAULT_MODEL as _DEFAULT_CLAUDE_MODEL
+        except Exception:
+            _DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
+        cli_model = self._get_cli_model_name(model) or _DEFAULT_CLAUDE_MODEL
 
         # Add project directory structure for initial prompts
         if is_initial_prompt:
@@ -351,7 +354,7 @@ node_modules/
                                 project_id=project_path,
                                 role="system",
                                 message_type="system",
-                                content=f"Claude Code SDK initialized (Model: {cli_model})",
+                                content=f"Vrabby initialized (Model: {cli_model})",
                                 metadata_json={
                                     "cli_type": self.cli_type.value,
                                     "mode": "SDK",
@@ -519,7 +522,7 @@ node_modules/
         except Exception as e:
             ui.error(f"Exception occurred: {str(e)}", "Claude SDK")
             if log_callback:
-                await log_callback(f"Claude SDK Exception: {str(e)}")
+                await log_callback(f"Vrabby Exception: {str(e)}")
             raise
 
     async def get_session_id(self, project_id: str) -> Optional[str]:
