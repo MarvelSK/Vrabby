@@ -6,10 +6,44 @@ interface ToolResultItemProps {
     filePath: string;
     content?: string;
     timestamp?: string;
+    onOpenFile?: (path: string) => void;
 }
 
-const ToolResultItem: React.FC<ToolResultItemProps> = ({action, filePath, content}) => {
+const ToolResultItem: React.FC<ToolResultItemProps> = ({action, filePath, content, onOpenFile}) => {
     const [isExpanded, setIsExpanded] = useState(false);
+
+    const normalizePathForOpen = (p: string) => {
+        try {
+            let s = (p || '').toString();
+            // unify slashes
+            s = s.replace(/\\/g, '/');
+            // remove leading ellipsis shorthand
+            s = s.replace(/^…\//, '');
+            // if contains /repo/, strip everything before it
+            const repoIdx = s.indexOf('/repo/');
+            if (repoIdx >= 0) {
+                s = s.substring(repoIdx + '/repo/'.length);
+            } else if (/^[A-Za-z]:\//.test(s)) {
+                // Windows absolute path without /repo/ marker — try common project roots
+                const roots = ['/apps/', '/app/', '/packages/', '/src/'];
+                for (const root of roots) {
+                    const ix = s.indexOf(root);
+                    if (ix >= 0) {
+                        s = s.substring(ix + 1); // drop leading slash so paths are repo-relative like apps/..
+                        break;
+                    }
+                }
+                // Fallback to just filename if still absolute
+                if (/^[A-Za-z]:\//.test(s)) {
+                    const parts = s.split('/');
+                    s = parts[parts.length - 1] || s;
+                }
+            }
+            return s;
+        } catch {
+            return p;
+        }
+    };
 
     const getIcon = () => {
         switch (action) {
@@ -67,8 +101,10 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({action, filePath, conten
     };
 
     const getFileName = (path: string) => {
-        const parts = path.split('/');
-        return parts[parts.length - 1] || path;
+        if (!path) return '';
+        const normalized = path.replace(/\\/g, '/');
+        const parts = normalized.split('/');
+        return parts[parts.length - 1] || normalized;
     };
 
     const getDirectoryPath = (path: string) => {
@@ -89,14 +125,16 @@ const ToolResultItem: React.FC<ToolResultItemProps> = ({action, filePath, conten
                 <span className="flex-shrink-0 font-normal text-gray-600 dark:text-gray-400">
           {action}
         </span>
-                <span
-                    className="relative w-fit max-w-xs truncate rounded-md bg-gray-100 dark:bg-gray-800 px-2 py-0 text-start text-xs font-normal text-gray-600 dark:text-gray-400 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700"
-                    title={filePath}
+                <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onOpenFile?.(normalizePathForOpen(filePath)); }}
+                    className="relative w-fit max-w-xs truncate rounded-md bg-gray-100 dark:bg-gray-800 px-2 py-0 text-start text-xs font-normal text-gray-600 dark:text-gray-400 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600"
+                    title={getFileName(filePath)}
                 >
           <span className="truncate">
-            {filePath}
+            {getFileName(filePath)}
           </span>
-        </span>
+        </button>
                 {content && (
                     <svg
                         xmlns="http://www.w3.org/2000/svg"

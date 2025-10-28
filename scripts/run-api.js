@@ -68,10 +68,12 @@ try {
 }
 
 // Preflight: ensure core Python deps are installed (uvicorn, pydantic, pydantic_core)
+let uvicornOk = false;
 try {
     const { execSync } = require('child_process');
     const checkCmd = `${pythonPath} -c "import importlib;\nfor m in ['uvicorn','pydantic','pydantic_core']:\n    importlib.import_module(m)\nprint('OK')"`;
     execSync(checkCmd, { stdio: 'pipe', shell: isWindows, cwd: apiDir });
+    uvicornOk = true;
 } catch (e) {
     console.warn('[API] Installing missing Python packages...');
     try {
@@ -84,9 +86,19 @@ try {
         } else {
             require('child_process').execSync(`${pythonPath} -m pip install -r requirements.txt`, { cwd: apiDir, stdio: 'inherit', shell: isWindows });
         }
+        // Re-check after installation
+        try {
+            const { execSync } = require('child_process');
+            const checkCmd = `${pythonPath} -c "import importlib; importlib.import_module('uvicorn'); print('OK')"`;
+            execSync(checkCmd, { stdio: 'pipe', shell: isWindows, cwd: apiDir });
+            uvicornOk = true;
+        } catch {
+            uvicornOk = false;
+        }
         console.log('[API] Python packages installed.');
     } catch (err) {
         console.warn('[API] Failed to auto-install requirements. You may need to install manually.');
+        uvicornOk = false;
     }
 }
 
@@ -96,6 +108,12 @@ function spawnApi(py) {
     const debugEnv = String(process.env.DEBUG || '').trim().toLowerCase();
     const debugEnabled = ['1','true','yes','on'].includes(debugEnv);
     const logLevel = debugEnabled ? 'info' : 'warning';
+    const childEnv = {
+        ...process.env,
+        API_PORT: apiPort.toString(),
+        // Disable DB migrations by default in dev unless explicitly enabled
+        DB_MIGRATIONS_ON_STARTUP: (process.env.DB_MIGRATIONS_ON_STARTUP ?? '0'),
+    };
     return spawn(
         py,
         ['-m', 'uvicorn', 'app.main:app', '--host', '0.0.0.0', '--port', apiPort.toString(), '--log-level', logLevel],
@@ -103,7 +121,7 @@ function spawnApi(py) {
             cwd: apiDir,
             stdio: 'inherit',
             shell: isWindows,
-            env: {...process.env, API_PORT: apiPort.toString()}
+            env: childEnv
         }
     );
 }
@@ -136,12 +154,17 @@ apiProcess.on('error', (error) => {
 apiProcess.on('exit', (code) => {
     if (code !== 0 && code !== null) {
         console.error(`API server exited with code ${code}`);
-        // If exit is due to missing uvicorn, print a hint
-        console.error('If you see ModuleNotFoundError: No module named \"uvicorn\", install dependencies:');
-        if (isWindows) {
-            console.error('  apps\\api\\.venv\\Scripts\\pip install -r apps\\api\\requirements.txt');
+        // Only show uvicorn hint if uvicorn wasn't importable during preflight
+        if (!uvicornOk) {
+            console.error('Module uvicorn not found. Install dependencies:');
+            if (isWindows) {
+                console.error('  apps\\api\\.venv\\Scripts\\pip install -r apps\\api\\requirements.txt');
+            } else {
+                console.error('  cd apps/api && .venv/bin/pip install -r requirements.txt');
+            }
         } else {
-            console.error('  cd apps/api && .venv/bin/pip install -r requirements.txt');
+            console.error('The API crashed during startup. Check logs above for the real error (e.g., database connectivity/migrations).');
+            console.error('Tip: set DB_MIGRATIONS_ON_STARTUP=0 to skip DB migrations in development.');
         }
         process.exit(code);
     }

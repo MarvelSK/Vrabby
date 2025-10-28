@@ -94,7 +94,7 @@ class ClaudeCodeCLI(BaseCLI):
     ) -> AsyncGenerator[Message, None]:
         """Execute instruction using Claude Code Python SDK"""
 
-        ui.info("Starting Vrabby execution", "Vrabby")
+        ui.info("Starting Claude SDK execution", "Claude SDK")
         ui.debug(f"Instruction: {instruction[:100]}...", "Claude SDK")
         ui.debug(f"Project path: {project_path}", "Claude SDK")
         ui.debug(f"Session ID: {session_id}", "Claude SDK")
@@ -106,34 +106,31 @@ class ClaudeCodeCLI(BaseCLI):
         try:
             from app.services.claude_act import get_system_prompt
 
+            # Use full system-prompt only for initial project setup; otherwise use core+design
             system_prompt = get_system_prompt(first_run=is_initial_prompt)
             ui.debug(f"System prompt loaded: {len(system_prompt)} chars", "Claude SDK")
             full_system_prompt = system_prompt
             trimmed_system_prompt = system_prompt
-            if os.name == "nt":
-                max_prompt_chars = 3000
-                if len(system_prompt) > max_prompt_chars:
-                    trimmed_prompt = system_prompt[:max_prompt_chars]
-                    last_linebreak = trimmed_prompt.rfind("\n")
-                    if last_linebreak > 0:
-                        trimmed_prompt = trimmed_prompt[:last_linebreak]
-                    ui.warning(
-                        (
-                            "System prompt exceeded Windows command length; "
-                            "using trimmed prompt fallback if temporary settings fail"
-                        ),
-                        "Claude SDK",
-                    )
-                    trimmed_system_prompt = trimmed_prompt
         except Exception as e:
             ui.error(f"Failed to load system prompt: {e}", "Claude SDK")
             full_system_prompt = (
-                "You are Vrabby, an advanced AI coding assistant created by Marek Vrábel, "
-                "founder of MHost.sk. You specialize in building modern fullstack web applications "
-                "with high-quality code, performance, and design. Use Next.js, TypeScript, and Tailwind "
-                "best practices. Maintain clarity, accessibility, and production-readiness."
+                "You are Claude Code, an AI coding assistant specialized in building modern web applications."
             )
             trimmed_system_prompt = full_system_prompt
+
+        # Enforce concise assistant style to avoid verbose breakdowns and noisy step-by-step lists
+        concise_directive = (
+            "\n\nStyle rules:\n"
+            "- Be concise; avoid long breakdowns.\n"
+            "- For small tasks, keep the response under 4 short lines when possible.\n"
+            "- Summarize what changed in one sentence; skip marketing or filler language.\n"
+            "- When referencing files in chat, show only the final filename (e.g., 'TodoForm.tsx').\n"
+        )
+        try:
+            full_system_prompt = (full_system_prompt or "") + concise_directive
+            trimmed_system_prompt = (trimmed_system_prompt or "") + concise_directive
+        except Exception:
+            pass
 
         # Get CLI-specific model name
         cli_model = self._get_cli_model_name(model) or "claude-sonnet-4-5-20250929"
@@ -350,7 +347,7 @@ node_modules/
                                 project_id=project_path,
                                 role="system",
                                 message_type="system",
-                                content=f"Vrabby initialized (Model: {cli_model})",
+                                content=f"Claude Code SDK initialized (Model: {cli_model})",
                                 metadata_json={
                                     "cli_type": self.cli_type.value,
                                     "mode": "SDK",
@@ -518,7 +515,7 @@ node_modules/
         except Exception as e:
             ui.error(f"Exception occurred: {str(e)}", "Claude SDK")
             if log_callback:
-                await log_callback(f"Vrabby Exception: {str(e)}")
+                await log_callback(f"Claude SDK Exception: {str(e)}")
             raise
 
     async def get_session_id(self, project_id: str) -> Optional[str]:

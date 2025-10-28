@@ -7,7 +7,7 @@
     "apps/web"
   ],
   "scripts": {
-    "dev": "npm run ensure:env && npm run ensure:venv && concurrently --raw \"npm run dev:api\" --prefix \"[WEB] \" \"npm run dev:web\"",
+    "dev": "node scripts/kill-ports.js && npm run ensure:env && npm run ensure:venv && concurrently --raw --names \"API,WEB\" -c \"auto\" \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "node scripts/run-api.js",
     "dev:web": "node scripts/run-web.js",
     "ensure:env": "node scripts/setup-env.js",

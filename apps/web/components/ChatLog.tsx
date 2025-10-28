@@ -9,7 +9,7 @@ import ThinkingSection from './chat/ThinkingSection';
 import { logger } from '@/lib/logger';
 
 // Tool Message Component - Enhanced with new design
-const ToolMessage = ({content, metadata}: {
+const ToolMessage = ({content, metadata, onOpenFile}: {
     content: unknown;
     metadata?: {
         tool_name?: string;
@@ -17,7 +17,8 @@ const ToolMessage = ({content, metadata}: {
         description?: string;
         file_path?: string;
         [key: string]: unknown
-    }
+    };
+    onOpenFile?: (path: string) => void;
 }) => {
     // Process tool content to extract action and file path
     const processToolContent = (rawContent: unknown) => {
@@ -110,7 +111,10 @@ const ToolMessage = ({content, metadata}: {
     // Use new ToolResultItem for clean display
     return <ToolResultItem
         action={action as "Edited" | "Created" | "Read" | "Deleted" | "Generated" | "Searched" | "Executed"}
-        filePath={filePath} content={cleanContent}/>;
+        filePath={filePath}
+        content={cleanContent}
+        onOpenFile={onOpenFile}
+    />;
 };
 
 const WS_BASE = process.env.NEXT_PUBLIC_WS_BASE || 'ws://localhost:8080';
@@ -149,6 +153,7 @@ interface ChatLogProps {
     onProjectStatusUpdate?: (status: string, message?: string) => void;
     startRequest?: (requestId: string) => void;
     completeRequest?: (requestId: string, isSuccessful: boolean, errorMessage?: string) => void;
+    onOpenFileFromTool?: (path: string) => void;
 }
 
 export default function ChatLog({
@@ -156,7 +161,8 @@ export default function ChatLog({
                                     onSessionStatusChange,
                                     onProjectStatusUpdate,
                                     startRequest,
-                                    completeRequest
+                                    completeRequest,
+                                    onOpenFileFromTool
                                 }: ChatLogProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -225,6 +231,7 @@ export default function ChatLog({
             // Handle session start
             if (status === 'act_start' || status === 'chat_start') {
                 setIsWaitingForResponse(true); // Set waiting state when session starts
+                onSessionStatusChange?.(true);
 
                 // ★ NEW: Request 시작 처리
                 if (data?.request_id && startRequest) {
@@ -983,10 +990,20 @@ export default function ChatLog({
                                     ) : (
                                         // Agent message - full width, no box
                                         <div className="w-full">
+                                            {/* Thought duration indicator, if provided */}
+                                            {message?.metadata_json?.thinking_duration && (
+                                                <div className="mb-1">
+                                                    <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                        Thought for {message.metadata_json.thinking_duration}s
+                                                    </span>
+                                                </div>
+                                            )}
                                             {isToolUsageMessage(message.content, message.metadata_json) ? (
                                                 // Tool usage - clean display with expand functionality
                                                 <ToolMessage content={message.content}
-                                                             metadata={message.metadata_json}/>
+                                                             metadata={message.metadata_json}
+                                                             onOpenFile={onOpenFileFromTool} />
                                             ) : (
                                                 // Regular agent message - plain text
                                                 <div className="text-sm text-gray-900 dark:text-white leading-relaxed">

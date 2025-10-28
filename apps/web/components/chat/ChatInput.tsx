@@ -1,7 +1,7 @@
 "use client";
 
 import {useState, useRef, useEffect, useMemo} from 'react';
-import {SendHorizontal, MessageSquare, Image, Wrench} from 'lucide-react';
+import {SendHorizontal, MessageSquare, Image, Wrench, ChevronDown} from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
@@ -69,6 +69,7 @@ export default function ChatInput({
     const [isDragOver, setIsDragOver] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [showAssistantSelector, setShowAssistantSelector] = useState(false);
 
     const modelOptionsForCli = useMemo(
         () => modelOptions.filter(option => option.cli === preferredCli),
@@ -314,53 +315,85 @@ export default function ChatInput({
                         )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex flex-col text-[11px] text-gray-500 dark:text-gray-400">
-                            <span>Assistant</span>
-                            <select
-                                value={preferredCli}
-                                onChange={(e) => {
-                                    onCliChange?.(e.target.value);
-                                    requestAnimationFrame(() => textareaRef.current?.focus());
-                                }}
-                                disabled={cliChangeDisabled || !onCliChange}
-                                className="mt-1 w-32 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-xs py-1 px-2 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600 disabled:opacity-60"
-                            >
-                                {cliOptions.length === 0 && <option value={preferredCli}>{preferredCli}</option>}
-                                {cliOptions.map(option => (
-                                    <option key={option.id} value={option.id} disabled={!option.available}>
-                                        {option.name}{!option.available ? ' (Unavailable)' : ''}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="flex flex-col text-[11px] text-gray-500 dark:text-gray-400">
-                            <span>Model</span>
-                            <select
-                                value={selectedModelValue}
-                                onChange={(e) => {
-                                    const option = modelOptionsForCli.find(opt => opt.id === e.target.value);
-                                    if (option) {
-                                        onModelChange?.(option);
-                                        requestAnimationFrame(() => textareaRef.current?.focus());
-                                    }
-                                }}
-                                disabled={modelChangeDisabled || !onModelChange || modelOptionsForCli.length === 0}
-                                className="mt-1 w-40 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-xs py-1 px-2 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600 disabled:opacity-60"
-                            >
-                                {modelOptionsForCli.length === 0 && <option value="">No models available</option>}
-                                {modelOptionsForCli.length > 0 && selectedModelValue === '' && (
-                                    <option value="" disabled>Select model</option>
-                                )}
-                                {modelOptionsForCli.map(option => (
-                                    <option key={option.id} value={option.id} disabled={!option.available}>
-                                        {option.name}{!option.available ? ' (Unavailable)' : ''}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
+                    {/* Assistant/Model Toggle (hidden by default) */}
+                    <div className="flex items-center">
+                        <button
+                            type="button"
+                            aria-expanded={showAssistantSelector}
+                            aria-controls="assistant-selector-panel"
+                            onClick={() => setShowAssistantSelector(v => !v)}
+                            className="inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                            title="Choose assistant and model"
+                        >
+                            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAssistantSelector ? 'rotate-180' : ''}`}/>
+                            <span className="font-medium">Assistant & Model</span>
+                            <span className="text-gray-400 dark:text-gray-500">•</span>
+                            <span className="text-gray-700 dark:text-gray-200">
+                                {cliOptions.find(o => o.id === preferredCli)?.name || preferredCli}
+                            </span>
+                            {selectedModelValue && (
+                                <>
+                                    <span className="text-gray-400 dark:text-gray-500">/</span>
+                                    <span className="text-gray-700 dark:text-gray-200 max-w-[140px] truncate" title={selectedModelValue}>
+                                        {modelOptionsForCli.find(o => o.id === selectedModelValue)?.name || selectedModelValue}
+                                    </span>
+                                </>
+                            )}
+                        </button>
                     </div>
                 </div>
+
+                {/* Collapsible assistant/model panel */}
+                {showAssistantSelector && (
+                    <div id="assistant-selector-panel" className="mt-1 p-3 rounded-md border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40">
+                        <div className="flex flex-wrap items-center gap-4">
+                            <div className="flex flex-col text-[11px] text-gray-500 dark:text-gray-400">
+                                <span>Assistant</span>
+                                <select
+                                    value={preferredCli}
+                                    onChange={(e) => {
+                                        onCliChange?.(e.target.value);
+                                        requestAnimationFrame(() => textareaRef.current?.focus());
+                                    }}
+                                    disabled={cliChangeDisabled || !onCliChange}
+                                    className="mt-1 w-40 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-xs py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600 disabled:opacity-60"
+                                >
+                                    {cliOptions.length === 0 && <option value={preferredCli}>{preferredCli}</option>}
+                                    {cliOptions.map(option => (
+                                        <option key={option.id} value={option.id} disabled={!option.available}>
+                                            {option.name}{!option.available ? ' (Unavailable)' : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex flex-col text-[11px] text-gray-500 dark:text-gray-400">
+                                <span>Model</span>
+                                <select
+                                    value={selectedModelValue}
+                                    onChange={(e) => {
+                                        const option = modelOptionsForCli.find(opt => opt.id === e.target.value);
+                                        if (option) {
+                                            onModelChange?.(option);
+                                            requestAnimationFrame(() => textareaRef.current?.focus());
+                                        }
+                                    }}
+                                    disabled={modelChangeDisabled || !onModelChange || modelOptionsForCli.length === 0}
+                                    className="mt-1 w-56 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-xs py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-600 disabled:opacity-60"
+                                >
+                                    {modelOptionsForCli.length === 0 && <option value="">No models available</option>}
+                                    {modelOptionsForCli.length > 0 && selectedModelValue === '' && (
+                                        <option value="" disabled>Select model</option>
+                                    )}
+                                    {modelOptionsForCli.map(option => (
+                                        <option key={option.id} value={option.id} disabled={!option.available}>
+                                            {option.name}{!option.available ? ' (Unavailable)' : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="relative">
           <textarea
@@ -371,7 +404,7 @@ export default function ChatInput({
               className="w-full ring-offset-background placeholder:text-gray-500 dark:placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 resize-none text-[16px] leading-snug md:text-base bg-transparent focus:bg-transparent rounded-md p-2 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700"
               id="chatinput"
               placeholder={placeholder}
-              disabled={false}
+              disabled={disabled}
               style={{minHeight: '60px'}}
           />
                     {isDragOver && projectId && preferredCli !== 'cursor' && preferredCli !== 'qwen' && (

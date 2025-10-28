@@ -91,7 +91,7 @@ export function MessageList({messages, isLoading}: MessageListProps) {
                                         const isThoughtExpanded = expandedThoughts.has(message.id);
 
                                         return (
-                                            <div key={message.id || messageIndex}>
+                                            <div key={message.id || messageIndex}>f
                                                 {/* Thinking UI for assistant messages */}
                                                 {!isUser && hasThinking && messageIndex === 0 && (
                                                     <div className="mb-2">

@@ -65,44 +65,53 @@ def _find_prompt_variants() -> Dict[str, Path]:
 
 def _compose_system_prompt(first_run: bool) -> str:
     """
-    Compose the effective system prompt dynamically:
-      • core always
-      • design only for first_run (initial project creation)
-      • build always
-    Falls back to legacy or minimal prompt if none found.
+    Compose the effective system prompt based on session stage:
+      • First run (project initialization): use the monolithic system-prompt.md if present.
+      • Subsequent runs (existing project): use only core + design prompts (no build section).
+    Falls back to minimal prompt if none found.
     """
     cache_key = f"first_run={first_run}"
     if cache_key in _PROMPT_CACHE:
         return _PROMPT_CACHE[cache_key]
 
     resolved = _find_prompt_variants()
-    parts: List[str] = []
 
-    core_txt = _read_file_safe(resolved.get("core", Path()))
-    design_txt = _read_file_safe(resolved.get("design", Path())) if first_run else None
-    build_txt = _read_file_safe(resolved.get("build", Path()))
-
-    if core_txt or design_txt or build_txt:
+    # 1) First run: prefer legacy single prompt for project bootstrapping
+    if first_run:
+        legacy_file = resolved.get("legacy_single")
+        if legacy_file:
+            txt = _read_file_safe(legacy_file)
+            if txt:
+                print("✅ Using system-prompt.md for initial project setup")
+                _PROMPT_CACHE[cache_key] = txt
+                return txt
+        # Fallback: if legacy not found, use core + design
+        core_txt = _read_file_safe(resolved.get("core", Path()))
+        design_txt = _read_file_safe(resolved.get("design", Path()))
+        parts: List[str] = []
         if core_txt:
             parts.append(core_txt)
-        if first_run and design_txt:
+        if design_txt:
             parts.append("\n\n---\n\n" + design_txt)
-        if build_txt:
-            parts.append("\n\n---\n\n" + build_txt)
-
         composed = "\n".join(parts).strip()
-        print(f"✅ Loaded system prompts (core{' + design' if first_run and design_txt else ''} + build)")
+        if composed:
+            print("⚠️ system-prompt.md missing; using core + design for initial setup")
+            _PROMPT_CACHE[cache_key] = composed
+            return composed
+
+    # 2) Non‑initial runs: use core + design only
+    core_txt = _read_file_safe(resolved.get("core", Path()))
+    design_txt = _read_file_safe(resolved.get("design", Path()))
+    parts: List[str] = []
+    if core_txt:
+        parts.append(core_txt)
+    if design_txt:
+        parts.append("\n\n---\n\n" + design_txt)
+    composed = "\n".join(parts).strip()
+    if composed:
+        print("✅ Loaded system prompts (core + design) for existing project")
         _PROMPT_CACHE[cache_key] = composed
         return composed
-
-    # Fallback: use legacy single file
-    legacy_file = resolved.get("legacy_single")
-    if legacy_file:
-        txt = _read_file_safe(legacy_file)
-        if txt:
-            print("⚠️  Using legacy system-prompt.md fallback")
-            _PROMPT_CACHE[cache_key] = txt
-            return txt
 
     # Final fallback: hardcoded minimal prompt
     fallback = (

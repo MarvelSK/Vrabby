@@ -154,7 +154,7 @@ const hexToFilter = (hex: string): string => {
         '#6B7280': 'brightness(0) saturate(100%) invert(47%) sepia(7%) saturate(625%) hue-rotate(174deg) brightness(92%) contrast(82%)',  // Gray for Cursor
         '#A855F7': 'brightness(0) saturate(100%) invert(48%) sepia(79%) saturate(1532%) hue-rotate(256deg) brightness(95%) contrast(101%)',  // Purple for Qwen
         '#4285F4': 'brightness(0) saturate(100%) invert(40%) sepia(97%) saturate(1449%) hue-rotate(198deg) brightness(97%) contrast(101%)',  // Blue for Gemini
-        '#000000': 'brightness(0) saturate(100%)'  // Black for Codex
+        '#1c1c1c': 'brightness(0) saturate(100%)'  // Near-black for Codex
     };
     return filters[hex] || '';
 };
@@ -860,6 +860,19 @@ export default function ChatPage({params}: Params) {
         }
     };
 
+    // Always navigate to the project's landing page on preview start
+    useEffect(() => {
+        if (!previewUrl || !showPreview) return;
+        try {
+            const baseUrl = previewUrl.split('?')[0];
+            if (iframeRef.current) {
+                iframeRef.current.src = `${baseUrl}/`;
+                setCurrentRoute('/');
+            }
+        } catch (e) {
+            // no-op
+        }
+    }, [previewUrl, showPreview]);
 
     async function stop() {
         try {
@@ -1928,6 +1941,40 @@ export default function ChatPage({params}: Params) {
                                 onProjectStatusUpdate={handleProjectStatusUpdate}
                                 startRequest={startRequest}
                                 completeRequest={completeRequest}
+                                onOpenFileFromTool={(rawPath) => {
+                                    try {
+                                        let p = (rawPath || '').toString();
+                                        p = p.replace(/\\/g, '/');
+                                        // Strip leading ellipsis shorthand
+                                        p = p.replace(/^…\//, '');
+                                        const pLower = p.toLowerCase();
+                                        // Try to resolve to a known entry by suffix match (works for repo-relative or filename only)
+                                        let resolved: string | null = null;
+                                        try {
+                                            const allEntries: Entry[] = Array.from(folderContents.values()).flat();
+                                            for (const e of allEntries) {
+                                                const ep = (e.path || '').toString().replace(/\\/g, '/');
+                                                const epLower = ep.toLowerCase();
+                                                if (epLower.endsWith('/' + pLower) || epLower.endsWith(pLower)) {
+                                                    resolved = e.path;
+                                                    break;
+                                                }
+                                                const name = ep.split('/').pop()?.toLowerCase() || '';
+                                                if (name && name === pLower) {
+                                                    resolved = e.path;
+                                                    break;
+                                                }
+                                            }
+                                        } catch {}
+
+                                        const target = resolved || rawPath;
+                                        setShowPreview(false);
+                                        void openFile(target);
+                                    } catch (e) {
+                                        setShowPreview(false);
+                                        void openFile(rawPath);
+                                    }
+                                }}
                             />
                         </div>
 
