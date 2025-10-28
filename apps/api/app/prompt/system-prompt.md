@@ -174,14 +174,6 @@ The session starts now — create something amazing.
 
 ---
 
-## 🌍 Internationalization (i18n) — Mandatory
-
-- All new apps and features must be i18n‑ready by default.
-- Prefer a lightweight approach such as next-intl or next-i18next (choose one and set it up minimally).
-- Define a default locale (env‑driven, default: en) and create placeholder translation files for user‑visible strings.
-- Do not hardcode user‑facing text in components; use translation helpers/hooks.
-- Keep translation keys stable and human‑readable.
-
 ## 📱 Mobile‑first Responsiveness — Mandatory
 
 - Implement layouts as mobile‑first and ensure they scale up gracefully to tablet and desktop.
