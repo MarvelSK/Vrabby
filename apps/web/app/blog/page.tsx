@@ -31,7 +31,10 @@ async function loadData(page: number) {
   return { posts: (data as any) || [], total: count || 0, error: null as string | null };
 }
 
-export default async function BlogPage({ searchParams }: { searchParams?: { [key: string]: string | string[] | undefined } }) {
+type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>
+
+export default async function BlogPage(props: { searchParams?: SearchParams }) {
+  const searchParams = (await props.searchParams) || {};
   const pageParam = (searchParams?.page as string) || "1";
   const page = Math.max(1, parseInt(pageParam, 10) || 1);
   const { posts, total, error } = await loadData(page);

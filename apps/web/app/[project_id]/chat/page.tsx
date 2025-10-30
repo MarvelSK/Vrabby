@@ -1,5 +1,5 @@
 "use client";
-import {useEffect, useState, useRef, useCallback, useMemo} from 'react';
+import {useEffect, useState, useRef, useCallback, useMemo, use} from 'react';
 import {AnimatePresence} from 'framer-motion';
 import {MotionDiv, MotionH3, MotionP, MotionButton} from '../../../lib/motion';
 import {useRouter, useSearchParams} from 'next/navigation';
@@ -160,7 +160,7 @@ const hexToFilter = (hex: string): string => {
 };
 
 type Entry = { path: string; type: 'file' | 'dir'; size?: number };
-type Params = { params: { project_id: string } };
+type Params = Promise<{ project_id: string }>;
 type ProjectStatus = 'initializing' | 'active' | 'failed';
 
 type CliStatusSnapshot = {
@@ -348,7 +348,8 @@ function TreeView({
     );
 }
 
-export default function ChatPage({params}: Params) {
+export default function ChatPage(props: { params: Params }) {
+    const params = use(props.params);
     const projectId = params.project_id;
     const router = useRouter();
     const searchParams = useSearchParams();
