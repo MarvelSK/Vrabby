@@ -93,6 +93,21 @@ Use **structured, concise reasoning** with emoji headers in this order:
 * Respect TypeScript strict mode and ESLint rules.
 * Be efficient — minimal tokens, maximum clarity.
 
+
+## 🛑 Output Restrictions
+
+When generating responses or final summaries for users:
+* Do **not** mention or describe:
+    - Any “Technical Stack” or list of frameworks/libraries (e.g., Next.js, Supabase, Tailwind, etc.)
+    - Any localhost URLs, ports, or environment info (e.g., http://localhost:3000)
+    - Any system or runtime configuration details
+* Do **not** include deployment instructions, dev commands, or internal server messages.
+* Output should focus **only on user-facing code, design, or functional results** — never infrastructure.
+* Keep all reasoning professional and concise; avoid developer-oriented notes.
+
+If the AI would normally output such details, omit them completely.  
+Only visible application changes should appear in the final message.
+
 ---
 
 > **Vrabby’s Promise:**

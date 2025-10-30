@@ -220,13 +220,13 @@ async def restart_preview(
 
     # Start preview
     process_name, port = start_preview_process(project_id, repo_path, port=body.port)
-    host = os.getenv("PREVIEW_PUBLIC_HOST", os.getenv("PREVIEW_BIND", "127.0.0.1")).strip()
-    if host in ("0.0.0.0", "::", "::1"):
-        host = "127.0.0.1"
+    api_host = os.getenv("API_PUBLIC_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    api_port = settings.api_port
+    proxy_base = f"http://{api_host}:{api_port}/api/projects/{project_id}/preview/proxy"
     result = {
         "success": True,
         "port": port,
-        "url": f"http://{host}:{port}",
+        "url": proxy_base,
         "process_name": process_name
     }
 

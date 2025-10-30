@@ -347,6 +347,14 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
     # Stop existing process if any
     stop_preview_process(project_id)
 
+    lock_path = os.path.join(repo_path, ".next", "dev", "lock")
+    if os.path.exists(lock_path):
+        try:
+            os.remove(lock_path)
+            print(f"[PreviewFix] Removed stale lock file: {lock_path}")
+        except Exception as e:
+            print(f"[PreviewFix] Warning: failed to remove stale lock file: {e}")
+
     # Clear previous logs for this project
     if project_id in _process_logs:
         _process_logs[project_id] = []
@@ -370,8 +378,7 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
     env.update({
         "NODE_ENV": "development",
         "NEXT_TELEMETRY_DISABLED": "1",
-        "NPM_CONFIG_UPDATE_NOTIFIER": "false",
-        "PORT": str(port)
+        "NPM_CONFIG_UPDATE_NOTIFIER": "false"
     })
 
     try:
@@ -383,7 +390,6 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
             if os.path.exists(package_lock) or os.path.exists(yarn_lock):
                 print("Detected non-pnpm artifacts (npm/yarn). Cleaning to use pnpm...")
                 try:
-                    import shutil
                     shutil.rmtree(os.path.join(repo_path, "node_modules"), ignore_errors=True)
                 except Exception as _e:
                     print(f"Warning: failed to remove node_modules: {_e}")
@@ -438,8 +444,15 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
             popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
         # Determine bind host for dev server (default IPv4 loopback)
         host = os.getenv("PREVIEW_BIND", "127.0.0.1")
+        # Prefer launching Next directly via node to keep a stable child process on Windows
+        node_cmd = shutil.which("node.exe") or shutil.which("node") or "node"
+        next_bin = os.path.join(repo_path, "node_modules", "next", "dist", "bin", "next")
+        if os.path.exists(next_bin) and node_cmd:
+            cmd = [node_cmd, next_bin, "dev", "-p", str(port), "--hostname", host]
+        else:
+            cmd = [npm_cmd, "exec", "next", "dev", "-p", str(port), "--hostname", host]
         process = subprocess.Popen(
-            [npm_cmd, "run", "dev", "--", "-p", str(port), "-H", host],
+            cmd,
             **popen_kwargs
         )
 
