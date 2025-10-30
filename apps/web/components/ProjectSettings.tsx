@@ -28,7 +28,7 @@ const CLI_OPTIONS: CLIOption[] = [
         color: 'from-orange-500 to-red-600',
         checkCommand: 'claude --version',
         downloadUrl: 'https://github.com/anthropics/claude-code',
-        installCommand: 'npm install -g @anthropic-ai/claude-code',
+        installCommand: 'pnpm add -g @anthropic-ai/claude-code',
         models: [
             {
                 id: 'claude-opus-4.1',
@@ -63,7 +63,7 @@ const CLI_OPTIONS: CLIOption[] = [
         color: 'from-red-500 to-pink-600',
         checkCommand: 'qwen --version',
         downloadUrl: 'https://github.com/QwenLM/qwen-code',
-        installCommand: 'npm install -g @qwen-code/qwen-code',
+        installCommand: 'pnpm add -g @qwen-code/qwen-code',
         models: [
             {id: 'qwen3-coder-plus', name: 'Qwen3 Coder Plus', description: 'Agentic coding model (ACP)'},
         ],
@@ -77,7 +77,7 @@ const CLI_OPTIONS: CLIOption[] = [
         color: 'from-[#DE7356] to-[#e88a6f]',
         checkCommand: 'gemini -v',
         downloadUrl: 'https://github.com/google-gemini/gemini-cli',
-        installCommand: 'npm install -g @google/generative-ai-cli',
+        installCommand: 'pnpm add -g @google/generative-ai-cli',
         models: [
             {
                 id: 'gemini-2.5-pro',
@@ -96,7 +96,7 @@ const CLI_OPTIONS: CLIOption[] = [
         color: 'from-green-500 to-teal-600',
         checkCommand: 'codex --version',
         downloadUrl: 'https://github.com/openai/codex',
-        installCommand: 'npm install -g openai-codex-cli',
+        installCommand: 'pnpm add -g openai-codex-cli',
         models: [
             {id: 'gpt-5', name: 'GPT-5', description: 'Smartest coding model with built-in thinking'},
             {id: 'gpt-4.1', name: 'GPT-4.1', description: 'Major improvements in coding and long-context'},

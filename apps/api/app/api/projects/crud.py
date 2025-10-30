@@ -159,7 +159,7 @@ async def initialize_project_background(project_id: str, project_name: str, body
 
 
 async def install_dependencies_background(project_id: str, project_path: str):
-    """Install dependencies in background (npm) using sandbox if enabled"""
+    """Install dependencies in background (pnpm) using sandbox if enabled"""
     try:
         import os
         use_sandbox = getattr(settings, 'sandbox_enabled', True)
@@ -168,7 +168,7 @@ async def install_dependencies_background(project_id: str, project_path: str):
             print(f"Installing dependencies for project {project_id}...")
 
             if use_sandbox:
-                # Attempt Dockerized install
+                # Attempt Dockerized install using pnpm via corepack
                 try:
                     image = getattr(settings, 'sandbox_docker_image', 'node:20')
                     cpu = getattr(settings, 'sandbox_cpu', '1.0')
@@ -183,7 +183,7 @@ async def install_dependencies_background(project_id: str, project_path: str):
                         '--cpus', str(cpu),
                         '--memory', str(mem),
                         image,
-                        'npm', 'install'
+                        'bash', '-lc', 'corepack enable && pnpm install'
                     ]
                     print(f"[SANDBOX] Running: {' '.join(cmd)}")
                     process = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE,
@@ -192,7 +192,7 @@ async def install_dependencies_background(project_id: str, project_path: str):
                         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
                     except asyncio.TimeoutError:
                         process.kill()
-                        print(f"[SANDBOX] npm install timed out for project {project_id}")
+                        print(f"[SANDBOX] pnpm install timed out for project {project_id}")
                         return
                     if process.returncode == 0:
                         print(f"[SANDBOX] Dependencies installed successfully for project {project_id}")

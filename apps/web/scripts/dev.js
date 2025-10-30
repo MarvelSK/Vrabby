@@ -31,7 +31,7 @@ const openBrowserOnce = () => {
 };
 
 // Start Next.js dev server
-const next = spawn('npx', ['next', 'dev', '--turbo'], {
+const next = spawn('pnpm', ['exec', 'next', 'dev', '--turbo'], {
     stdio: 'inherit',
     shell: true
 });

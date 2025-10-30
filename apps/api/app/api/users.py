@@ -70,11 +70,20 @@ async def update_me(body: UserProfileUpdate, db: AsyncSession = Depends(get_db_a
 async def record_event(body: UserEvent, db: AsyncSession = Depends(get_db_async), current_user: CurrentUser = Depends(get_current_user)):
     owner_id: str = current_user["id"]  # type: ignore
     svc = UsersService(db)
-    await svc.record_event(
-        owner_id,
-        event=body.event,
-        email=body.email,
-        name=body.name,
-        avatar_url=body.avatar_url,
-    )
-    return {"ok": True}
+    try:
+        await svc.record_event(
+            owner_id,
+            event=body.event,
+            email=body.email,
+            name=body.name,
+            avatar_url=body.avatar_url,
+        )
+        return {"ok": True}
+    except Exception as e:
+        # Avoid failing the UI due to transient DB issues — log and return ok
+        try:
+            import logging
+            logging.getLogger("app.api.users").warning("record_event failed: %s", e)
+        except Exception:
+            pass
+        return {"ok": True, "warning": "event_not_recorded"}

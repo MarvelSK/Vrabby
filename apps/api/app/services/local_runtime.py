@@ -19,17 +19,21 @@ _npm_executable: Optional[str] = None
 
 
 def _get_npm_executable() -> str:
-    """Locate the npm executable respecting platform specifics."""
+    """Locate the pnpm executable respecting platform specifics.
+
+    Note: This project now standardizes on pnpm. We keep the function name for backward
+    compatibility with callers that import get_npm_executable().
+    """
     global _npm_executable
 
     if _npm_executable and os.path.exists(_npm_executable):
         return _npm_executable
 
     candidates = [
-        "npm.cmd",
-        "npm.exe",
-        "npm",
-    ] if os.name == "nt" else ["npm"]
+        "pnpm.cmd",
+        "pnpm.exe",
+        "pnpm",
+    ] if os.name == "nt" else ["pnpm"]
 
     for candidate in candidates:
         path = shutil.which(candidate)
@@ -38,12 +42,12 @@ def _get_npm_executable() -> str:
             return path
 
     raise RuntimeError(
-        "npm command not found. Install Node.js (includes npm) and ensure it is available on PATH."
+        "pnpm command not found. Install pnpm (e.g., via corepack: `corepack enable`) and ensure it is on PATH."
     )
 
 
 def get_npm_executable() -> str:
-    """Public accessor for npm executable path."""
+    """Public accessor for pnpm executable path (kept for backward compatibility)."""
     return _get_npm_executable()
 
 
@@ -262,11 +266,11 @@ def _should_install_dependencies(repo_path: str) -> bool:
     Check if dependencies need to be installed.
     Returns True if:
     - node_modules doesn't exist
-    - package.json or package-lock.json has changed since last install
+    - package.json or pnpm-lock.yaml has changed since last install
     """
     node_modules_path = os.path.join(repo_path, "node_modules")
     package_json_path = os.path.join(repo_path, "package.json")
-    package_lock_path = os.path.join(repo_path, "package-lock.json")
+    pnpm_lock_path = os.path.join(repo_path, "pnpm-lock.yaml")
     install_hash_path = os.path.join(repo_path, ".lovable_install_hash")
 
     # If node_modules doesn't exist, definitely need to install
@@ -282,9 +286,9 @@ def _should_install_dependencies(repo_path: str) -> bool:
         with open(package_json_path, 'rb') as f:
             current_hash += hashlib.md5(f.read()).hexdigest()
 
-    # Hash npm's package-lock.json if it exists
-    if os.path.exists(package_lock_path):
-        with open(package_lock_path, 'rb') as f:
+    # Hash pnpm's lockfile if it exists
+    if os.path.exists(pnpm_lock_path):
+        with open(pnpm_lock_path, 'rb') as f:
             current_hash += hashlib.md5(f.read()).hexdigest()
 
     # Create final hash
@@ -305,7 +309,7 @@ def _should_install_dependencies(repo_path: str) -> bool:
 def _save_install_hash(repo_path: str) -> None:
     """Save the current hash of package files after successful install"""
     package_json_path = os.path.join(repo_path, "package.json")
-    package_lock_path = os.path.join(repo_path, "package-lock.json")
+    pnpm_lock_path = os.path.join(repo_path, "pnpm-lock.yaml")
     install_hash_path = os.path.join(repo_path, ".lovable_install_hash")
 
     # Calculate current hash
@@ -316,9 +320,9 @@ def _save_install_hash(repo_path: str) -> None:
         with open(package_json_path, 'rb') as f:
             current_hash += hashlib.md5(f.read()).hexdigest()
 
-    # Hash package-lock.json if it exists
-    if os.path.exists(package_lock_path):
-        with open(package_lock_path, 'rb') as f:
+    # Hash pnpm lockfile if it exists
+    if os.path.exists(pnpm_lock_path):
+        with open(pnpm_lock_path, 'rb') as f:
             current_hash += hashlib.md5(f.read()).hexdigest()
 
     # Create final hash and save
@@ -371,23 +375,21 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
     })
 
     try:
-        # Normalize repository to npm to avoid mixed package managers
+        # Normalize repository to pnpm to avoid mixed package managers
         try:
-            pnpm_lock = os.path.join(repo_path, "pnpm-lock.yaml")
+            package_lock = os.path.join(repo_path, "package-lock.json")
             yarn_lock = os.path.join(repo_path, "yarn.lock")
-            pnpm_dir = os.path.join(repo_path, "node_modules", ".pnpm")
-            if os.path.exists(pnpm_lock) or os.path.exists(yarn_lock) or os.path.isdir(pnpm_dir):
-                print("Detected non-npm artifacts (pnpm/yarn). Cleaning to use npm...")
-                # Remove node_modules to avoid arborist crashes
+            # If npm/yarn artifacts exist, remove them to prefer pnpm
+            if os.path.exists(package_lock) or os.path.exists(yarn_lock):
+                print("Detected non-pnpm artifacts (npm/yarn). Cleaning to use pnpm...")
                 try:
                     import shutil
                     shutil.rmtree(os.path.join(repo_path, "node_modules"), ignore_errors=True)
                 except Exception as _e:
                     print(f"Warning: failed to remove node_modules: {_e}")
-                # Remove other lockfiles
                 try:
-                    if os.path.exists(pnpm_lock):
-                        os.remove(pnpm_lock)
+                    if os.path.exists(package_lock):
+                        os.remove(package_lock)
                 except Exception:
                     pass
                 try:
@@ -396,30 +398,30 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
                 except Exception:
                     pass
         except Exception as _e:
-            print(f"Warning during npm normalization: {_e}")
+            print(f"Warning during pnpm normalization: {_e}")
 
         npm_cmd = _get_npm_executable()
 
         # Only install dependencies if needed
         if _should_install_dependencies(repo_path):
-            print(f"Installing dependencies for project {project_id} with npm...")
+            print(f"Installing dependencies for project {project_id} with pnpm...")
             install_result = subprocess.run(
                 [npm_cmd, "install"],
                 cwd=repo_path,
                 env=env,
                 capture_output=True,
                 text=True,
-                timeout=120  # 2 minutes timeout for npm install
+                timeout=120  # 2 minutes timeout for pnpm install
             )
 
             if install_result.returncode != 0:
-                raise RuntimeError(f"npm install failed: {install_result.stderr}")
+                raise RuntimeError(f"pnpm install failed: {install_result.stderr}")
 
             # Save hash after successful install
             _save_install_hash(repo_path)
-            print(f"Dependencies installed successfully for project {project_id} using npm")
+            print(f"Dependencies installed successfully for project {project_id} using pnpm")
         else:
-            print(f"Dependencies already up to date for project {project_id}, skipping npm install")
+            print(f"Dependencies already up to date for project {project_id}, skipping pnpm install")
 
         # Start development server
         print(f"Starting Next.js dev server for project {project_id} on port {port}...")
@@ -481,7 +483,7 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
         return process_name, port
 
     except subprocess.TimeoutExpired:
-        raise RuntimeError("npm install timed out after 2 minutes")
+        raise RuntimeError("pnpm install timed out after 2 minutes")
     except Exception as e:
         raise RuntimeError(f"Failed to start preview process: {str(e)}")
 
@@ -529,21 +531,21 @@ def stop_preview_process(project_id: str, cleanup_cache: bool = False) -> None:
                 del _process_logs[project_id]
                 print(f"[PreviewStop] Cleared logs for {project_id}")
 
-    # Optionally cleanup npm cache
+    # Optionally cleanup pnpm store
     if cleanup_cache:
         try:
             repo_path = os.path.join(settings.projects_root, project_id, "repo")
             if os.path.exists(repo_path):
-                npm_cmd = _get_npm_executable()
+                pnpm_cmd = _get_npm_executable()
                 subprocess.run(
-                    [npm_cmd, "cache", "clean", "--force"],
+                    [pnpm_cmd, "store", "prune"],
                     cwd=repo_path,
                     capture_output=True,
                     timeout=30
                 )
-                print(f"Cleaned npm cache for project {project_id}")
+                print(f"Pruned pnpm store for project {project_id}")
         except Exception as e:
-            print(f"Failed to clean npm cache for {project_id}: {e}")
+            print(f"Failed to prune pnpm store for {project_id}: {e}")
 
 
 def cleanup_project_resources(project_id: str) -> None:

@@ -49,7 +49,7 @@ function resolvePreferredPython() {
     } else {
         console.error('   Linux: sudo apt install python3 python3-venv');
     }
-    console.error('\n   Then run: npm install\n');
+    console.error('\n   Then run: pnpm install\n');
     process.exit(1);
 }
 
@@ -87,7 +87,7 @@ function setupWithUv() {
         console.error('\nHow to fix:');
         console.error('   Option 1: cd apps/api && uv pip install -r requirements.txt');
         console.error('   Option 2: Remove .venv and try with pip:');
-        console.error('             rm -rf apps/api/.venv && npm install');
+        console.error('             rm -rf apps/api/.venv && pnpm install');
         process.exit(1);
     }
 
@@ -112,7 +112,7 @@ function setupWithPip() {
             console.error('      Fix: sudo apt install python3-venv');
             console.error('   2. Permission issues');
             console.error('      Fix: Check folder permissions');
-            console.error('\n   Then run: npm install\n');
+            console.error('\n   Then run: pnpm install\n');
             process.exit(1);
         }
     } else {
@@ -150,11 +150,11 @@ function setupWithPip() {
             console.error('      pip install -r requirements.txt');
         }
         console.error('\n   Option 2: Clean and retry');
-        console.error('      npm run clean');
-        console.error('      npm install');
+        console.error('      pnpm run clean');
+        console.error('      pnpm install');
         console.error('\n   Option 3: Install uv for faster installation');
         console.error('      Mac: brew install uv');
-        console.error('      Then: npm install');
+        console.error('      Then: pnpm install');
         process.exit(1);
     }
 

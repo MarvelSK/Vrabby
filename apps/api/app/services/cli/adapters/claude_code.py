@@ -43,7 +43,7 @@ class ClaudeCodeCLI(BaseCLI):
                     "configured": False,
                     "error": (
                         "Claude Code CLI not installed or not working.\n\nTo install:\n"
-                        "1. Install Claude Code: npm install -g @anthropic-ai/claude-code\n"
+                        "1. Install Claude Code: pnpm add -g @anthropic-ai/claude-code\n"
                         "2. Login to Claude: claude login\n3. Try running your prompt again"
                     ),
                 }
@@ -56,7 +56,7 @@ class ClaudeCodeCLI(BaseCLI):
                     "configured": False,
                     "error": (
                         "Claude Code CLI not responding correctly.\n\nPlease try:\n"
-                        "1. Reinstall: npm install -g @anthropic-ai/claude-code\n"
+                        "1. Reinstall: pnpm add -g @anthropic-ai/claude-code\n"
                         "2. Login: claude login\n3. Check installation: claude -h"
                     ),
                 }
@@ -77,7 +77,7 @@ class ClaudeCodeCLI(BaseCLI):
                 "configured": False,
                 "error": (
                     f"Failed to check Claude Code CLI: {str(e)}\n\nTo install:\n"
-                    "1. Install Claude Code: npm install -g @anthropic-ai/claude-code\n"
+                    "1. Install Claude Code: pnpm add -g @anthropic-ai/claude-code\n"
                     "2. Login to Claude: claude login"
                 ),
             }

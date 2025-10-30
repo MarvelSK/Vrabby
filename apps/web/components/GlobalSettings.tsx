@@ -37,7 +37,7 @@ const CLI_OPTIONS: CLIOption[] = [
         color: 'from-orange-500 to-red-600',
         brandColor: '#4285F4',
         downloadUrl: 'https://docs.anthropic.com/en/docs/claude-code/overview',
-        installCommand: 'npm install -g @anthropic-ai/claude-code',
+        installCommand: 'pnpm add -g @anthropic-ai/claude-code',
         enabled: true,
         models: [
             {id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5'},
@@ -67,7 +67,7 @@ const CLI_OPTIONS: CLIOption[] = [
         color: 'from-purple-500 to-pink-500',
         brandColor: '#4285F4',
         downloadUrl: 'https://github.com/QwenLM/qwen-code',
-        installCommand: 'npm install -g @qwen-code/qwen-code@latest',
+        installCommand: 'pnpm add -g @qwen-code/qwen-code@latest',
         enabled: true,
         models: [
             {id: 'qwen3-coder-plus', name: 'Qwen3 Coder Plus'}
@@ -81,7 +81,7 @@ const CLI_OPTIONS: CLIOption[] = [
         color: 'from-blue-400 to-purple-600',
         brandColor: '#4285F4',
         downloadUrl: 'https://github.com/google-gemini/gemini-cli',
-        installCommand: 'npm install -g @google/gemini-cli',
+        installCommand: 'pnpm add -g @google/gemini-cli',
         enabled: true,
         models: [
             {id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro'},
@@ -96,7 +96,7 @@ const CLI_OPTIONS: CLIOption[] = [
         color: 'from-gray-900 to-black',
         brandColor: '#4285F4',
         downloadUrl: 'https://developers.openai.com/codex/cli/',
-        installCommand: 'npm install -g @openai/codex',
+        installCommand: 'pnpm add -g @openai/codex',
         enabled: true,
         models: [
             {id: 'gpt-5', name: 'GPT-5'}

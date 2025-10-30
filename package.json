@@ -3,17 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "description": "Vrabby coding AI agent",
-  "workspaces": [
-    "apps/web"
-  ],
   "scripts": {
-    "dev": "node scripts/kill-ports.js && npm run ensure:env && npm run ensure:venv && concurrently --raw --names \"API,WEB\" -c \"auto\" \"npm run dev:api\" \"npm run dev:web\"",
+    "dev": "node scripts/kill-ports.js && pnpm run ensure:env && pnpm run ensure:venv && concurrently --raw --names \"API,WEB\" -c \"auto\" \"pnpm run dev:api\" \"pnpm run dev:web\"",
     "dev:api": "node scripts/run-api.js",
     "dev:web": "node scripts/run-web.js",
     "ensure:env": "node scripts/setup-env.js",
     "ensure:venv": "node scripts/setup-venv.js",
-    "postinstall": "npm run ensure:env && npm run ensure:venv",
-    "setup": "npm install",
+    "postinstall": "pnpm run ensure:env && pnpm run ensure:venv",
+    "setup": "pnpm install",
     "clean": "node scripts/clean.js",
     "db:reset": "node scripts/reset-db.js",
     "db:backup": "node scripts/backup-db.js"

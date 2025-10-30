@@ -151,18 +151,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             pass
         return response
 
-app.add_middleware(GZipMiddleware, minimum_size=500)
-app.add_middleware(LogFilterMiddleware)
-app.add_middleware(RateLimitMiddleware)
-
-# CORS configuration (no wildcard in production)
+# CORS should be outermost so it can attach headers to all responses, including errors
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
+
+app.add_middleware(GZipMiddleware, minimum_size=500)
+app.add_middleware(LogFilterMiddleware)
+app.add_middleware(RateLimitMiddleware)
 
 # Routers
 app.include_router(projects_router, prefix="/api/projects")

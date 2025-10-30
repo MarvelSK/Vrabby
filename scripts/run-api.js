@@ -143,8 +143,8 @@ apiProcess.on('error', (error) => {
         console.error('      Or create venv with: python3.12 -m venv .venv');
     }
     console.error('\n   4. If it exists but still fails:');
-    console.error('      npm run clean');
-    console.error('      npm install');
+    console.error('      pnpm run clean');
+    console.error('      pnpm install');
     console.error('\n   5. Check if port is available:');
     console.error(`      lsof -i :${apiPort} (Mac/Linux)`);
     console.error(`      netstat -ano | findstr :${apiPort} (Windows)`);

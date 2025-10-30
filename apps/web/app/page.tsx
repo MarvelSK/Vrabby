@@ -68,6 +68,15 @@ export default function HomePage() {
         [key: string]: { installed: boolean; checking: boolean; version?: string; error?: string };
     }>({});
     const [isInitialLoad, setIsInitialLoad] = useState(true);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        const el = textareaRef.current;
+        if (el) {
+            el.style.height = "auto";
+            el.style.height = Math.min(el.scrollHeight, 300) + "px";
+        }
+    }, [prompt]);
 
     // Models per assistant
     const modelsByAssistant = {
@@ -790,18 +799,21 @@ export default function HomePage() {
                                 `}</style>
 
                                 <textarea
+                                    ref={textareaRef}
                                     value={prompt}
                                     onChange={(e) => setPrompt(e.target.value)}
                                     placeholder={`${prefix}${endings[endingIndex].substring(0, subIndex)}`}
                                     disabled={isCreatingProject}
                                     className="flex w-full rounded-md px-2 py-2 placeholder:text-gray-400 dark:placeholder:text-white/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 resize-none text-[16px] leading-snug md:text-base focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent focus:bg-transparent flex-1 text-gray-900 dark:text-white overflow-y-auto placeholder-typing"
-                                    style={{height: "120px"}}
+                                    style={{
+                                        height: "80px",
+                                        maxHeight: "300px",
+                                        overflowY: "auto",
+                                        transition: "height 0.1s ease",
+                                    }}
                                     onKeyDown={(e) => {
                                         if (e.key === "Enter") {
-                                            if (e.metaKey || e.ctrlKey) {
-                                                e.preventDefault();
-                                                handleSubmit();
-                                            } else if (!e.shiftKey) {
+                                            if (e.metaKey || e.ctrlKey || !e.shiftKey) {
                                                 e.preventDefault();
                                                 handleSubmit();
                                             }
@@ -858,7 +870,7 @@ export default function HomePage() {
                                 </div>
 
                                 {/* Assistant selector */}
-                                <div className="relative z-[200]" ref={assistantDropdownRef}>
+                                <div className="relative z-[200] hidden" ref={assistantDropdownRef}>
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -936,7 +948,7 @@ export default function HomePage() {
                                 </div>
 
                                 {/* Model selector */}
-                                <div className="relative z-[200]" ref={modelDropdownRef}>
+                                <div className="relative z-[200] hidden" ref={modelDropdownRef}>
                                     <button
                                         type="button"
                                         onClick={() => {

@@ -15,7 +15,7 @@ const webPort = process.env.WEB_PORT || 3000;
 console.log(`Starting Web server on http://localhost:${webPort}...`);
 
 const webProcess = spawn(
-    'npm',
+    'pnpm',
     ['run', 'dev', '--', '--port', webPort.toString()],
     {
         cwd: webDir,
@@ -31,7 +31,7 @@ webProcess.on('error', (error) => {
     console.error('   1. Check if Node modules are installed:');
     console.error('      ls apps/web/node_modules');
     console.error('\n   2. If not, run:');
-    console.error('      npm install');
+    console.error('      pnpm install');
     console.error('\n   3. Check if port is available:');
     console.error(`      lsof -i :${webPort} (Mac/Linux)`);
     console.error(`      netstat -ano | findstr :${webPort} (Windows)`);

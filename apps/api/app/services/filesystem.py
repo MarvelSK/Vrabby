@@ -41,18 +41,19 @@ def scaffold_nextjs_minimal(repo_path: str) -> None:
     project_name = Path(repo_path).name
 
     try:
-        npx_available = any(
+        pnpm_available = any(
             shutil.which(candidate)
-            for candidate in (["npx", "npx.cmd"] if os.name == "nt" else ["npx"])
+            for candidate in (["pnpm", "pnpm.cmd"] if os.name == "nt" else ["pnpm"]) 
         )
 
-        if not npx_available:
+        if not pnpm_available:
             raise Exception(
-                "Cannot find 'npx'. Install Node.js 18+ and ensure the 'npx' command is available on your PATH."
+                "Cannot find 'pnpm'. Install Node.js 18+, run 'corepack enable', and ensure the 'pnpm' command is available on your PATH."
             )
         # Create Next.js app with TypeScript and Tailwind CSS
         base_cmd = [
-            "npx",
+            "pnpm",
+            "dlx",
             "create-next-app@latest",
             project_name,
             "--typescript",
@@ -60,7 +61,7 @@ def scaffold_nextjs_minimal(repo_path: str) -> None:
             "--eslint",
             "--app",
             "--import-alias", "@/*",
-            "--use-npm",
+            "--use-pnpm",
             "--skip-install",  # We'll install dependencies later (handled by backend)
             "--yes"  # Auto-accept all prompts
         ]

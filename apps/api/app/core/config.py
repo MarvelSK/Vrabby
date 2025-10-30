@@ -100,7 +100,9 @@ class Settings(BaseModel):
     # CORS configuration
     web_port_env: str = os.getenv("WEB_PORT", "3000")
     default_origin: str = os.getenv("DEFAULT_WEB_ORIGIN", f"http://localhost:{web_port_env}")
-    allowed_origins_csv: str = os.getenv("ALLOWED_ORIGINS", default_origin)
+    # Include both localhost and 127.0.0.1 by default for smoother local dev
+    default_origin_alt: str = f"http://127.0.0.1:{web_port_env}"
+    allowed_origins_csv: str = os.getenv("ALLOWED_ORIGINS", f"{default_origin},{default_origin_alt}")
     allowed_origins: list[str] = [o.strip() for o in allowed_origins_csv.split(",") if o.strip()]
 
     # Supabase Auth (JWKS)

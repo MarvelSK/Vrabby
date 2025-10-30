@@ -76,7 +76,7 @@ class CodexCLI(BaseCLI):
             codex_exe = self._locate_codex_executable()
             if not codex_exe:
                 error_msg = (
-                    "Codex CLI not found on PATH. Install with `npm install -g @openai/codex` and ensure the npm bin directory is on PATH."
+                    "Codex CLI not found on PATH. Install with `pnpm add -g @openai/codex` and ensure your global pnpm bin directory is on PATH."
                 )
                 ui.debug(error_msg, "Codex")
                 return {
@@ -140,7 +140,7 @@ class CodexCLI(BaseCLI):
         codex_exe = self._locate_codex_executable()
         if not codex_exe:
             raise RuntimeError(
-                "Codex CLI not available. Install with `npm install -g @openai/codex` and ensure it is on PATH.")
+                "Codex CLI not available. Install with `pnpm add -g @openai/codex` and ensure it is on PATH.")
 
         # Ensure AGENTS.md exists in project repo with system prompt (essential)
         # If needed, set Vrabby_DISABLE_AGENTS_MD=1 to skip.
