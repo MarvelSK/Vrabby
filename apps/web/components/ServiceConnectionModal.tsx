@@ -128,7 +128,7 @@ export default function ServiceConnectionModal({
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         token_id: savedToken.id,
-                        repo_name: `cc-lovable-${projectId}`,
+                        repo_name: `vrabby-${projectId}`,
                         private: false
                     })
                 });
@@ -163,7 +163,7 @@ export default function ServiceConnectionModal({
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         token_id: savedToken.id,
-                        project_name: `cc-lovable-${projectId}`,
+                        project_name: `vrabby-${projectId}`,
                         db_pass: dbPass,
                         region: 'us-east-1'
                     })
@@ -196,7 +196,7 @@ export default function ServiceConnectionModal({
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         token_id: savedToken.id,
-                        project_name: `cc-lovable-${projectId}`
+                        project_name: `vrabby-${projectId}`
                     })
                 });
 
