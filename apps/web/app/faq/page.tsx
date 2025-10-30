@@ -1,6 +1,7 @@
 import React from "react";
 import FAQItem, { FAQ } from "@/components/faq/FAQItem";
 import getSupabaseServer from "@/lib/supabaseServer";
+import { unstable_cache } from "next/cache";
 
 export const revalidate = 120; // refresh every 2 minutes
 
@@ -19,8 +20,14 @@ async function loadFAQs(): Promise<{ items: FAQ[]; error: string | null }> {
   }
 }
 
+const cachedLoadFAQs = unstable_cache(
+  async () => loadFAQs(),
+  ["faq_items"],
+  { revalidate: 120, tags: ["faq"] }
+);
+
 export default async function FAQPage() {
-  const { items, error } = await loadFAQs();
+  const { items, error } = await cachedLoadFAQs();
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">FAQ</h1>

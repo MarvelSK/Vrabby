@@ -1,6 +1,7 @@
 import React from "react";
 import PricingCard, { PricingFeature, PricingPlan } from "@/components/pricing/PricingCard";
 import getSupabaseServer from "@/lib/supabaseServer";
+import { unstable_cache } from "next/cache";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 export const revalidate = 120; // ISR
@@ -34,8 +35,14 @@ async function loadPricing(): Promise<{ plans: PricingPlan[]; features: Record<s
   }
 }
 
+const cachedLoadPricing = unstable_cache(
+  async () => loadPricing(),
+  ["pricing_page"],
+  { revalidate: 120, tags: ["pricing_plans", "pricing_features"] }
+);
+
 export default async function PricingPage() {
-  const { plans, features, error } = await loadPricing();
+  const { plans, features, error } = await cachedLoadPricing();
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
       <div className="text-center mb-8">

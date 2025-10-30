@@ -94,6 +94,7 @@ class ClaudeCodeCLI(BaseCLI):
             images: Optional[List[Dict[str, Any]]] = None,
             model: Optional[str] = None,
             is_initial_prompt: bool = False,
+            sub_agent: Optional[str] = None,
     ) -> AsyncGenerator[Message, None]:
         """Execute instruction using Claude Code Python SDK"""
 
@@ -110,28 +111,31 @@ class ClaudeCodeCLI(BaseCLI):
             project_id = (
                 project_path.split("/")[-1] if "/" in project_path else project_path
             )
-            existing_session_id_early = await self.get_session_id(project_id)
         except Exception:
             project_id = project_path
-            existing_session_id_early = None
-
         # Compute effective model name for CLI
         cli_model = self._get_cli_model_name(model) or "claude-sonnet-4-5-20250929"
+        agent_key = (sub_agent or "default").strip().lower()
+        session_key = f"{project_id}::{agent_key}::{cli_model}"
+        try:
+            existing_session_id_early = await self.get_session_id(session_key)
+        except Exception:
+            existing_session_id_early = None
 
-        last_meta = self._last_session_meta.get(project_id) or {}
+        last_meta = self._last_session_meta.get(session_key) or {}
         reuse_session = bool(
             existing_session_id_early and last_meta.get("model") == cli_model and not is_initial_prompt
         )
         if reuse_session:
-            ui.info(f"Reusing Claude session without re-init (model: {cli_model})", "Claude SDK")
+            ui.info(f"Reusing Claude session without re-init (model: {cli_model}, agent: {agent_key})", "Claude SDK")
         else:
             ui.debug(
-                f"Session init required (existing_session={bool(existing_session_id_early)}, last_model={last_meta.get('model')}, current_model={cli_model}, initial={is_initial_prompt})",
+                f"Session init required (existing_session={bool(existing_session_id_early)}, last_model={last_meta.get('model')}, current_model={cli_model}, initial={is_initial_prompt}, agent={agent_key})",
                 "Claude SDK",
             )
 
         # Update last-known session meta (model)
-        self._last_session_meta[project_id] = {
+        self._last_session_meta[session_key] = {
             "model": cli_model,
             "updated_at": datetime.utcnow().isoformat(),
         }
@@ -142,7 +146,7 @@ class ClaudeCodeCLI(BaseCLI):
                 from app.services.claude_act import get_system_prompt
 
                 # Use full system-prompt only for initial project setup; otherwise use core+design
-                system_prompt = get_system_prompt(first_run=is_initial_prompt)
+                system_prompt = get_system_prompt(first_run=is_initial_prompt, sub_agent=sub_agent)
                 ui.debug(f"System prompt loaded: {len(system_prompt)} chars", "Claude SDK")
                 full_system_prompt = system_prompt
                 trimmed_system_prompt = system_prompt
@@ -157,12 +161,16 @@ class ClaudeCodeCLI(BaseCLI):
             full_system_prompt = ""
             trimmed_system_prompt = ""
 
-        # Enforce concise assistant style to avoid verbose breakdowns and noisy step-by-step lists
+        # Enforce concise, frugal assistant style to reduce token usage
         concise_directive = (
-            "\n\nStyle rules:\n"
+            "\n\nStyle & efficiency rules:\n"
             "- Be concise; avoid long breakdowns.\n"
-            "- For small tasks, keep the response under 4 short lines when possible.\n"
-            "- Summarize what changed in one sentence; skip marketing or filler language.\n"
+            "- Avoid step-by-step lists unless explicitly asked. Prefer direct, surgical edits.\n"
+            "- Never paste long code in chat. Use Write/Edit/MultiEdit tools to apply changes and reply with one concise summary line.\n"
+            "- Before reading files, use Glob/Grep to locate only the smallest necessary files.\n"
+            "- Do not read or write in ignored paths (node_modules, .next, dist, coverage, *.lock, public/assets, large binaries).\n"
+            "- If a read would exceed ~200 KB, stop and propose a narrower plan or chunk the work.\n"
+            "- Maintain a concise change log in context/session-summary.md instead of repeating history in chat.\n"
             "- When referencing files in chat, show only the final filename (e.g., 'TodoForm.tsx').\n"
         )
         try:
@@ -172,42 +180,92 @@ class ClaudeCodeCLI(BaseCLI):
             pass
 
 
-        # Add project directory structure for initial prompts
+        # Provide a tiny repo map instead of large directory listings for initial prompts
         if is_initial_prompt:
-            project_structure_info = """
-<initial_context>
-## Project Directory Structure (node_modules are already installed)
-.eslintrc.json
-.gitignore
-next.config.mjs
-next-env.d.ts
-package.json
-postcss.config.mjs
-README.md
-tailwind.config.ts
-tsconfig.json
-.env
-src/app/favicon.ico
-src/app/globals.css
-src/app/layout.tsx
-src/app/page.tsx
-public/
-node_modules/
-</initial_context>"""
-            if os.name == "nt":
-                ui.warning(
-                    "Skipping extra project structure context on Windows to avoid command length limits",
-                    "Claude SDK",
-                )
-            else:
-                instruction = instruction + project_structure_info
-                ui.info(
-                    f"Added project structure info to initial prompt", "Claude SDK"
-                )
+            try:
+                context_dir = os.path.join(project_path, "context")
+                os.makedirs(context_dir, exist_ok=True)
+
+                # Build a compact repo map (top-level dirs + notable files with sizes)
+                repo_map = {"dirs": [], "notableFiles": [], "generated_at": datetime.utcnow().isoformat()}
+                try:
+                    entries = sorted(os.listdir(project_path))
+                    ignore_names = {"node_modules", ".next", "dist", "build", "coverage", ".git", ".venv"}
+                    for name in entries:
+                        if name in ignore_names:
+                            continue
+                        full = os.path.join(project_path, name)
+                        if os.path.isdir(full):
+                            repo_map["dirs"].append(name)
+                    # Cap dirs list to ~20 entries
+                    repo_map["dirs"] = repo_map["dirs"][:20]
+                except Exception:
+                    pass
+
+                notable = [
+                    "package.json", "pnpm-lock.yaml", "package-lock.json", "yarn.lock",
+                    "next.config.mjs", "next.config.js", "tailwind.config.ts", "tailwind.config.js",
+                    "tsconfig.json", "README.md", ".env", ".env.example"
+                ]
+                for fname in notable:
+                    p = os.path.join(project_path, fname)
+                    try:
+                        if os.path.isfile(p):
+                            size = os.path.getsize(p)
+                            repo_map["notableFiles"].append({"path": fname, "bytes": int(size)})
+                    except Exception:
+                        continue
+
+                repo_map_path = os.path.join(context_dir, "repo-map.json")
+                try:
+                    with open(repo_map_path, "w", encoding="utf-8") as f:
+                        json.dump(repo_map, f, ensure_ascii=False)
+                    ui.info(f"Wrote compact repo map to context/repo-map.json", "Claude SDK")
+                except Exception as write_err:
+                    ui.warning(f"Failed to write repo map: {write_err}", "Claude SDK")
+
+                # Ensure session-summary.md exists
+                summary_path = os.path.join(context_dir, "session-summary.md")
+                if not os.path.exists(summary_path):
+                    try:
+                        with open(summary_path, "w", encoding="utf-8") as f:
+                            f.write("# Session Summary\n\n- Use this file to keep a concise log of work done (features, files touched, follow-ups).\n\n" \
+                                    f"Created: {datetime.utcnow().isoformat()}\n")
+                    except Exception:
+                        pass
+
+                # Add a tiny hint to the instruction
+                hint = ("\n\n[context] A small repository map is available at context/repo-map.json. "
+                        "If you need more detail, use Glob/Grep to drill into files; do not ask for or generate large listings. "
+                        "Maintain a concise change log in context/session-summary.md.")
+                instruction = instruction + hint
+            except Exception as e:
+                ui.warning(f"Failed to prepare compact repo context: {e}", "Claude SDK")
 
         session_settings_path = None
         base_settings = {}
-        settings_file_path = os.path.join(project_path, ".claude", "settings.json")
+        settings_dir = os.path.join(project_path, ".claude")
+        settings_file_path = os.path.join(settings_dir, "settings.json")
+        # Persist a minimal default settings.json if missing (non-destructive)
+        try:
+            if not os.path.exists(settings_file_path):
+                os.makedirs(settings_dir, exist_ok=True)
+                _persistent_defaults = {
+                    "ignorePaths": [
+                        "node_modules", ".next", "dist", "build", "coverage", ".git", "**/*.min.*", "**/*.map",
+                        "public/assets/**", "**/*.lock", "**/*.svg", "**/*.png", "**/*.jpg", "**/*.jpeg", "**/*.gif"
+                    ],
+                    "maxReadBytes": 200000,
+                    "maxToolReadsPerTurn": 30,
+                    "preferDiffEdits": True,
+                    "autoApplyEdits": True,
+                }
+                with open(settings_file_path, "w", encoding="utf-8") as f:
+                    json.dump(_persistent_defaults, f, ensure_ascii=False, indent=2)
+                ui.info("Created default .claude/settings.json with conservative limits", "Claude SDK")
+        except Exception as _persist_err:
+            ui.warning(f"Could not persist default .claude/settings.json: {_persist_err}", "Claude SDK")
+
         if not reuse_session:
             if os.path.exists(settings_file_path):
                 try:
@@ -220,6 +278,32 @@ node_modules/
                 except Exception as settings_error:
                     ui.warning(f"Failed to load existing Claude settings: {settings_error}", "Claude SDK")
             session_settings = dict(base_settings)
+
+            # Inject conservative defaults to reduce token usage/tool noise
+            default_settings = {
+                "ignorePaths": [
+                    "node_modules", ".next", "dist", "build", "coverage", ".git", "**/*.min.*", "**/*.map",
+                    "public/assets/**", "**/*.lock", "**/*.svg", "**/*.png", "**/*.jpg", "**/*.jpeg", "**/*.gif"
+                ],
+                "maxReadBytes": 200000,
+                "maxToolReadsPerTurn": 30,
+                "preferDiffEdits": True,
+                "autoApplyEdits": True,
+            }
+            # Merge defaults without overwriting explicit project settings
+            for k, v in default_settings.items():
+                if k not in session_settings:
+                    session_settings[k] = v
+                elif k == "ignorePaths":
+                    try:
+                        existing = set(session_settings.get("ignorePaths", []) or [])
+                        for item in v:
+                            if item not in existing:
+                                existing.add(item)
+                        session_settings["ignorePaths"] = list(existing)
+                    except Exception:
+                        session_settings["ignorePaths"] = v
+
             session_settings["customSystemPrompt"] = full_system_prompt
             try:
                 temp_settings = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8")
@@ -337,7 +421,7 @@ node_modules/
             project_id = (
                 project_path.split("/")[-1] if "/" in project_path else project_path
             )
-            existing_session_id = await self.get_session_id(project_id)
+            existing_session_id = await self.get_session_id(session_key)
 
             # Update options with resume session if available
             if existing_session_id and not getattr(options, "resumeSessionId", None):
@@ -388,7 +472,7 @@ node_modules/
                             ):
                                 claude_session_id = message_obj.session_id
                                 await self.set_session_id(
-                                    project_id, claude_session_id
+                                    session_key, claude_session_id
                                 )
 
                             # Send init message (hidden from UI)

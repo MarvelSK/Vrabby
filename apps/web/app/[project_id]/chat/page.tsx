@@ -461,9 +461,35 @@ export default function ChatPage(props: { params: Params }) {
     }, [searchParams]);
 
     const cliStatusThrottleRef = useRef<{ inFlight: boolean; last: number }>({ inFlight: false, last: 0 });
-    const loadCliStatuses = useCallback(async () => {
+    const loadCliStatuses = useCallback(async (opts?: { forceNetwork?: boolean }) => {
         if (!projectId) return;
+        const forceNetwork = !!opts?.forceNetwork;
         const now = Date.now();
+
+        // Try sessionStorage cache first (30s TTL)
+        try {
+            if (typeof window !== 'undefined' && !forceNetwork) {
+                const cachedRaw = sessionStorage.getItem(`cli-status:${projectId}`);
+                if (cachedRaw) {
+                    const cached = JSON.parse(cachedRaw) as { ts: number; etag?: string | null; data: any };
+                    if (cached && (now - cached.ts) < 30000 && cached.data) {
+                        const snapshot: Record<string, CliStatusSnapshot> = {};
+                        CLI_ORDER.forEach(cli => {
+                            if (cached.data && cached.data[cli]) {
+                                snapshot[cli] = {
+                                    available: cached.data[cli]?.available,
+                                    configured: cached.data[cli]?.configured,
+                                    models: cached.data[cli]?.models
+                                };
+                            }
+                        });
+                        setCliStatuses(snapshot);
+                        return; // Fresh enough; skip network
+                    }
+                }
+            }
+        } catch (_) {}
+
         // Throttle to avoid hammering API (min 4s between loads) and skip if already in flight
         if (cliStatusThrottleRef.current.inFlight || (now - cliStatusThrottleRef.current.last) < 4000) {
             return;
@@ -471,7 +497,42 @@ export default function ChatPage(props: { params: Params }) {
         cliStatusThrottleRef.current.inFlight = true;
         try {
             const headers = await getAuthHeaders();
-            const response = await fetch(`${API_BASE}/api/chat/${projectId}/cli-status`, { headers });
+            let etag: string | null = null;
+            if (typeof window !== 'undefined') {
+                const cachedRaw = sessionStorage.getItem(`cli-status:${projectId}`);
+                if (cachedRaw) {
+                    try { etag = (JSON.parse(cachedRaw) as any)?.etag || null; } catch {}
+                }
+            }
+            const reqHeaders: any = { ...headers };
+            if (etag && !forceNetwork) reqHeaders['If-None-Match'] = etag;
+
+            const response = await fetch(`${API_BASE}/api/chat/${projectId}/cli-status`, { headers: reqHeaders });
+            if (response.status === 304) {
+                // Use cached payload
+                const cachedRaw = typeof window !== 'undefined' ? sessionStorage.getItem(`cli-status:${projectId}`) : null;
+                if (cachedRaw) {
+                    const cached = JSON.parse(cachedRaw) as { ts: number; etag?: string | null; data: any };
+                    const data = cached?.data || {};
+                    const snapshot: Record<string, CliStatusSnapshot> = {};
+                    CLI_ORDER.forEach(cli => {
+                        if (data && data[cli]) {
+                            snapshot[cli] = {
+                                available: data[cli]?.available,
+                                configured: data[cli]?.configured,
+                                models: data[cli]?.models
+                            };
+                        }
+                    });
+                    setCliStatuses(snapshot);
+                    // Refresh timestamp
+                    if (typeof window !== 'undefined') {
+                        sessionStorage.setItem(`cli-status:${projectId}`, JSON.stringify({ ts: now, etag, data }));
+                    }
+                    return;
+                }
+                // If no cache exists unexpectedly, fall through to treat as error
+            }
             if (!response.ok) throw new Error('Failed to load CLI statuses');
 
             const data = await response.json();
@@ -486,6 +547,14 @@ export default function ChatPage(props: { params: Params }) {
                 }
             });
             setCliStatuses(snapshot);
+
+            // Persist cache
+            try {
+                if (typeof window !== 'undefined') {
+                    const newEtag = response.headers.get('ETag');
+                    sessionStorage.setItem(`cli-status:${projectId}`, JSON.stringify({ ts: now, etag: newEtag, data }));
+                }
+            } catch (_) {}
         } catch (error) {
             logger.debug('Failed to load CLI statuses:', error as any);
             setCliStatuses({});
@@ -574,7 +643,7 @@ export default function ChatPage(props: { params: Params }) {
                     console.warn('Failed to record model switch message:', messageError);
                 }
 
-                await loadCliStatuses();
+                await loadCliStatuses({ forceNetwork: true });
             } catch (error) {
                 console.error('Failed to update model preference:', error);
                 updatePreferredCli(previousCli);

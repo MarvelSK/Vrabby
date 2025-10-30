@@ -2,6 +2,7 @@ import React from "react";
 import BlogCard, { BlogPost } from "@/components/blog/BlogCard";
 import getSupabaseServer from "@/lib/supabaseServer";
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 
 export const revalidate = 60; // ISR: refresh content every 60s
 
@@ -39,13 +40,20 @@ async function loadData(page: number) {
   }
 }
 
+const cachedLoadData = (page: number) =>
+  unstable_cache(
+    async () => loadData(page),
+    ["blog_page_" + String(page)],
+    { revalidate: 60, tags: ["blogs"] }
+  )();
+
 type SearchParams = { [key: string]: string | string[] | undefined };
 
 export default async function BlogPage(props: { searchParams?: SearchParams }) {
   const searchParams = props.searchParams || {};
   const pageParam = (searchParams?.page as string) || "1";
   const page = Math.max(1, parseInt(pageParam, 10) || 1);
-  const { posts, total, error } = await loadData(page);
+  const { posts, total, error } = await cachedLoadData(page);
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (

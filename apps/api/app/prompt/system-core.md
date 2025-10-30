@@ -93,6 +93,14 @@ Use **structured, concise reasoning** with emoji headers in this order:
 * Respect TypeScript strict mode and ESLint rules.
 * Be efficient — minimal tokens, maximum clarity.
 
+## ♻️ Efficiency rules
+- Do not echo code. Apply edits using tools only (Write/Edit/MultiEdit) and reply with one concise summary line.
+- Avoid step-by-step lists unless explicitly asked. Prefer direct, surgical edits.
+- Before reading files, use Glob/Grep to locate only the smallest necessary files.
+- Never read or write in ignored paths (node_modules, .next, dist, coverage, *.lock, public/assets, large binaries).
+- If a read would exceed ~200 KB, stop and propose a narrower plan or chunk the work.
+- Maintain a concise change log in context/session-summary.md instead of repeating history in chat.
+
 ---
 
 ## 🛑 Output Restrictions

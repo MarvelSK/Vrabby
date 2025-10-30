@@ -125,9 +125,30 @@ def _compose_system_prompt(first_run: bool) -> str:
     return fallback
 
 
-def get_system_prompt(first_run: bool = False) -> str:
-    """Public accessor for dynamic prompt composition."""
-    return _compose_system_prompt(first_run)
+def _agents_dir() -> Path:
+    return _prompt_dir() / "agents"
+
+_AGENT_CACHE: Dict[str, str] = {}
+
+def _read_agent_prompt(name: Optional[str]) -> str:
+    if not name:
+        return ""
+    key = name.strip().lower()
+    if key in _AGENT_CACHE:
+        return _AGENT_CACHE[key]
+    p = _agents_dir() / f"{key}.md"
+    txt = _read_file_safe(p) or ""
+    _AGENT_CACHE[key] = txt
+    return txt
+
+
+def get_system_prompt(first_run: bool = False, sub_agent: Optional[str] = None) -> str:
+    """Public accessor for dynamic prompt composition with optional sub‑agent layer."""
+    base = _compose_system_prompt(first_run)
+    agent_txt = _read_agent_prompt(sub_agent)
+    if agent_txt:
+        return f"{base}\n\n---\n\n{agent_txt}".strip()
+    return base
 
 
 def get_initial_system_prompt() -> str:
@@ -233,14 +254,29 @@ async def generate_diff_with_logging(
                     if isinstance(block, TextBlock):
                         response_text += block.text
                         if log_callback:
-                            await log_callback("text", {"content": block.text})
+                            try:
+                                import os as _os_log
+                                _max_chars = int(_os_log.getenv("MAX_LOG_TEXT_CHARS", "1200") or "1200")
+                            except Exception:
+                                _max_chars = 1200
+                            content = block.text
+                            if _max_chars and _max_chars > 0 and len(content) > _max_chars:
+                                content = content[:_max_chars] + "..."
+                            await log_callback("text", {"content": content})
 
                     elif isinstance(block, ThinkingBlock):
                         if log_callback:
-                            t = block.thinking
-                            await log_callback("thinking", {
-                                "content": (t[:200] + "...") if len(t) > 200 else t
-                            })
+                            import os as _os_th
+                            _log_thinking = (_os_th.getenv("LOG_THINKING", "0") or "0").strip().lower() in ("1", "true", "yes", "on")
+                            if _log_thinking:
+                                t = block.thinking
+                                max_th = 200
+                                try:
+                                    max_th = int(_os_th.getenv("MAX_LOG_THINKING_CHARS", "200") or "200")
+                                except Exception:
+                                    max_th = 200
+                                out = (t[:max_th] + "...") if len(t) > max_th else t
+                                await log_callback("thinking", {"content": out})
 
                     elif isinstance(block, ToolUseBlock):
                         pending_tools[block.id] = {
