@@ -5,14 +5,18 @@ import getSupabaseServer from "@/lib/supabaseServer";
 export const revalidate = 120; // refresh every 2 minutes
 
 async function loadFAQs(): Promise<{ items: FAQ[]; error: string | null }> {
-  const supabase = getSupabaseServer();
-  const { data, error } = await supabase
-    .from("faq_items")
-    .select("id,question,answer")
-    .eq("published", true)
-    .order("order", { ascending: true });
-  if (error) return { items: [], error: error.message };
-  return { items: (data as any) || [], error: null };
+  try {
+    const supabase = getSupabaseServer();
+    const { data, error } = await supabase
+      .from("faq_items")
+      .select("id,question,answer")
+      .eq("published", true)
+      .order("order", { ascending: true });
+    if (error) return { items: [], error: error.message };
+    return { items: (data as any) || [], error: null };
+  } catch (e: any) {
+    return { items: [], error: e?.message || "Failed to load FAQs" };
+  }
 }
 
 export default async function FAQPage() {

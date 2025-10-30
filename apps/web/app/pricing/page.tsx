@@ -6,28 +6,32 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 export const revalidate = 120; // ISR
 
 async function loadPricing(): Promise<{ plans: PricingPlan[]; features: Record<string, PricingFeature[]>; error: string | null }> {
-  const supabase = getSupabaseServer();
-  const { data: plansData, error: pErr } = await supabase
-    .from("pricing_plans")
-    .select("id,slug,name,price_eur,credits,blurb,stripe_price_id,is_most_popular,sort")
-    .eq("published", true)
-    .order("sort", { ascending: true });
-  if (pErr) return { plans: [], features: {}, error: pErr.message };
-  const plans = (plansData as any) || [];
-  if (!plans.length) return { plans, features: {}, error: null };
+  try {
+    const supabase = getSupabaseServer();
+    const { data: plansData, error: pErr } = await supabase
+      .from("pricing_plans")
+      .select("id,slug,name,price_eur,credits,blurb,stripe_price_id,is_most_popular,sort")
+      .eq("published", true)
+      .order("sort", { ascending: true });
+    if (pErr) return { plans: [], features: {}, error: pErr.message };
+    const plans = (plansData as any) || [];
+    if (!plans.length) return { plans, features: {}, error: null };
 
-  const { data: featData, error: fErr } = await supabase
-    .from("pricing_features")
-    .select("id,plan_id,text,tag")
-    .in("plan_id", plans.map((x: any) => x.id))
-    .order("id", { ascending: true });
-  if (fErr) return { plans, features: {}, error: fErr.message };
-  const grouped: Record<string, PricingFeature[]> = {};
-  for (const f of (featData as any) || []) {
-    grouped[f.plan_id] = grouped[f.plan_id] || [];
-    grouped[f.plan_id].push(f);
+    const { data: featData, error: fErr } = await supabase
+      .from("pricing_features")
+      .select("id,plan_id,text,tag")
+      .in("plan_id", plans.map((x: any) => x.id))
+      .order("id", { ascending: true });
+    if (fErr) return { plans, features: {}, error: fErr.message };
+    const grouped: Record<string, PricingFeature[]> = {};
+    for (const f of (featData as any) || []) {
+      grouped[f.plan_id] = grouped[f.plan_id] || [];
+      grouped[f.plan_id].push(f);
+    }
+    return { plans, features: grouped, error: null };
+  } catch (e: any) {
+    return { plans: [], features: {}, error: e?.message || "Failed to load pricing" };
   }
-  return { plans, features: grouped, error: null };
 }
 
 export default async function PricingPage() {

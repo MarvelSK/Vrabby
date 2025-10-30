@@ -25,6 +25,9 @@ class ClaudeCodeCLI(BaseCLI):
     def __init__(self):
         super().__init__(CLIType.CLAUDE)
         self.session_mapping: Dict[str, str] = {}
+        # Cache last-known session metadata to avoid unnecessary re-initialization
+        # Keyed by project_id: { 'model': str, 'updated_at': datetime.isoformat }
+        self._last_session_meta: Dict[str, Dict[str, Any]] = {}
 
     async def check_availability(self) -> Dict[str, Any]:
         """Check if Claude Code CLI is available"""
@@ -102,21 +105,57 @@ class ClaudeCodeCLI(BaseCLI):
         if log_callback:
             await log_callback("Starting execution...")
 
-        # Load system prompt
+        # Determine project/session early and decide whether to reuse existing session
         try:
-            from app.services.claude_act import get_system_prompt
-
-            # Use full system-prompt only for initial project setup; otherwise use core+design
-            system_prompt = get_system_prompt(first_run=is_initial_prompt)
-            ui.debug(f"System prompt loaded: {len(system_prompt)} chars", "Claude SDK")
-            full_system_prompt = system_prompt
-            trimmed_system_prompt = system_prompt
-        except Exception as e:
-            ui.error(f"Failed to load system prompt: {e}", "Claude SDK")
-            full_system_prompt = (
-                "You are Claude Code, an AI coding assistant specialized in building modern web applications."
+            project_id = (
+                project_path.split("/")[-1] if "/" in project_path else project_path
             )
-            trimmed_system_prompt = full_system_prompt
+            existing_session_id_early = await self.get_session_id(project_id)
+        except Exception:
+            project_id = project_path
+            existing_session_id_early = None
+
+        # Compute effective model name for CLI
+        cli_model = self._get_cli_model_name(model) or "claude-sonnet-4-5-20250929"
+
+        last_meta = self._last_session_meta.get(project_id) or {}
+        reuse_session = bool(
+            existing_session_id_early and last_meta.get("model") == cli_model and not is_initial_prompt
+        )
+        if reuse_session:
+            ui.info(f"Reusing Claude session without re-init (model: {cli_model})", "Claude SDK")
+        else:
+            ui.debug(
+                f"Session init required (existing_session={bool(existing_session_id_early)}, last_model={last_meta.get('model')}, current_model={cli_model}, initial={is_initial_prompt})",
+                "Claude SDK",
+            )
+
+        # Update last-known session meta (model)
+        self._last_session_meta[project_id] = {
+            "model": cli_model,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+
+        # Load system prompt (skip when reusing session)
+        if not reuse_session:
+            try:
+                from app.services.claude_act import get_system_prompt
+
+                # Use full system-prompt only for initial project setup; otherwise use core+design
+                system_prompt = get_system_prompt(first_run=is_initial_prompt)
+                ui.debug(f"System prompt loaded: {len(system_prompt)} chars", "Claude SDK")
+                full_system_prompt = system_prompt
+                trimmed_system_prompt = system_prompt
+            except Exception as e:
+                ui.error(f"Failed to load system prompt: {e}", "Claude SDK")
+                full_system_prompt = (
+                    "You are Claude Code, an AI coding assistant specialized in building modern web applications."
+                )
+                trimmed_system_prompt = full_system_prompt
+        else:
+            # When reusing session, don't reload prompts or pass them to options
+            full_system_prompt = ""
+            trimmed_system_prompt = ""
 
         # Enforce concise assistant style to avoid verbose breakdowns and noisy step-by-step lists
         concise_directive = (
@@ -132,8 +171,6 @@ class ClaudeCodeCLI(BaseCLI):
         except Exception:
             pass
 
-        # Get CLI-specific model name
-        cli_model = self._get_cli_model_name(model) or "claude-sonnet-4-5-20250929"
 
         # Add project directory structure for initial prompts
         if is_initial_prompt:
@@ -171,28 +208,31 @@ node_modules/
         session_settings_path = None
         base_settings = {}
         settings_file_path = os.path.join(project_path, ".claude", "settings.json")
-        if os.path.exists(settings_file_path):
+        if not reuse_session:
+            if os.path.exists(settings_file_path):
+                try:
+                    with open(settings_file_path, "r", encoding="utf-8") as settings_file:
+                        loaded_settings = json.load(settings_file)
+                        if isinstance(loaded_settings, dict):
+                            base_settings = loaded_settings
+                        else:
+                            ui.warning("Existing Claude settings file is not a JSON object; ignoring it", "Claude SDK")
+                except Exception as settings_error:
+                    ui.warning(f"Failed to load existing Claude settings: {settings_error}", "Claude SDK")
+            session_settings = dict(base_settings)
+            session_settings["customSystemPrompt"] = full_system_prompt
             try:
-                with open(settings_file_path, "r", encoding="utf-8") as settings_file:
-                    loaded_settings = json.load(settings_file)
-                    if isinstance(loaded_settings, dict):
-                        base_settings = loaded_settings
-                    else:
-                        ui.warning("Existing Claude settings file is not a JSON object; ignoring it", "Claude SDK")
-            except Exception as settings_error:
-                ui.warning(f"Failed to load existing Claude settings: {settings_error}", "Claude SDK")
-        session_settings = dict(base_settings)
-        session_settings["customSystemPrompt"] = full_system_prompt
-        try:
-            temp_settings = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8")
-            json.dump(session_settings, temp_settings, ensure_ascii=False)
-            temp_settings.flush()
-            temp_settings.close()
-            session_settings_path = temp_settings.name
-            ui.debug(f"Wrote temporary Claude settings to {session_settings_path}", "Claude SDK")
-        except Exception as settings_write_error:
-            ui.warning(f"Failed to create temporary settings file for Claude CLI: {settings_write_error}", "Claude SDK")
-            session_settings_path = None
+                temp_settings = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8")
+                json.dump(session_settings, temp_settings, ensure_ascii=False)
+                temp_settings.flush()
+                temp_settings.close()
+                session_settings_path = temp_settings.name
+                ui.debug(f"Wrote temporary Claude settings to {session_settings_path}", "Claude SDK")
+            except Exception as settings_write_error:
+                ui.warning(f"Failed to create temporary settings file for Claude CLI: {settings_write_error}", "Claude SDK")
+                session_settings_path = None
+        else:
+            ui.debug("Skipping settings file creation (reusing existing session)", "Claude SDK")
 
         # Configure tools based on initial prompt status
         if is_initial_prompt:
@@ -232,8 +272,9 @@ node_modules/
             }
             if session_settings_path:
                 option_kwargs["settings"] = session_settings_path
-            else:
+            elif not reuse_session:
                 option_kwargs["system_prompt"] = trimmed_system_prompt
+            # When reusing session, avoid passing system_prompt/settings to prevent re-init
             options = ClaudeCodeOptions(**option_kwargs)
         else:
             # For non-initial prompts: include TodoWrite in allowed tools
@@ -270,9 +311,18 @@ node_modules/
             }
             if session_settings_path:
                 option_kwargs["settings"] = session_settings_path
-            else:
+            elif not reuse_session:
                 option_kwargs["system_prompt"] = trimmed_system_prompt
+            # When reusing session, avoid passing system_prompt/settings to prevent re-init
             options = ClaudeCodeOptions(**option_kwargs)
+
+        # Early resume if we already have a session id and plan to reuse
+        try:
+            if existing_session_id_early and not getattr(options, "resumeSessionId", None):
+                options.resumeSessionId = existing_session_id_early
+                ui.info(f"Resuming session: {existing_session_id_early}", "Claude SDK")
+        except Exception:
+            pass
 
         ui.info(f"Using model: {cli_model}", "Claude SDK")
         ui.debug(f"Project path: {project_path}", "Claude SDK")
@@ -290,7 +340,7 @@ node_modules/
             existing_session_id = await self.get_session_id(project_id)
 
             # Update options with resume session if available
-            if existing_session_id:
+            if existing_session_id and not getattr(options, "resumeSessionId", None):
                 options.resumeSessionId = existing_session_id
                 ui.info(f"Resuming session: {existing_session_id}", "Claude SDK")
 

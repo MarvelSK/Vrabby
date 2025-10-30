@@ -496,10 +496,10 @@ export default function ChatPage(props: { params: Params }) {
     }, [projectId]);
 
     const handleModelChange = useCallback(
-        async (option: ModelOption, opts?: { skipCliUpdate?: boolean; overrideCli?: string }) => {
+        async (option: ModelOption, opts?: { skipCliUpdate?: boolean; overrideCli?: string; skipModelUpdate?: boolean }) => {
             if (!projectId || !option) return;
 
-            const {skipCliUpdate = false, overrideCli} = opts || {};
+            const {skipCliUpdate = false, overrideCli, skipModelUpdate = false} = opts || {};
             const targetCli = overrideCli ?? option.cli;
             const newModelId = option.id;
 
@@ -513,6 +513,11 @@ export default function ChatPage(props: { params: Params }) {
             setUsingGlobalDefaults(false);
             updatePreferredCli(targetCli);
             updateSelectedModel(newModelId);
+
+            // If we're explicitly skipping model update, avoid any server calls
+            if (skipModelUpdate) {
+                return;
+            }
 
             setIsUpdatingModel(true);
 
@@ -645,7 +650,8 @@ export default function ChatPage(props: { params: Params }) {
                 || modelOptions.find(option => option.available)
                 || modelOptions[0];
             if (fallbackOption) {
-                void handleModelChange(fallbackOption);
+                // On mount or re-mount, adjust UI state without triggering backend updates
+                void handleModelChange(fallbackOption, { skipCliUpdate: true, skipModelUpdate: true });
             }
         }
     }, [modelOptions, preferredCli, selectedModel, handleModelChange]);

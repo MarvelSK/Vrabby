@@ -8,33 +8,41 @@ export const revalidate = 60; // ISR: refresh content every 60s
 const PAGE_SIZE = 5;
 
 async function loadData(page: number) {
-  const supabase = getSupabaseServer();
-  const from = (page - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
+  try {
+    const supabase = getSupabaseServer();
+    const from = (page - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
 
-  const { count } = await supabase
-    .from("blogs")
-    .select("id", { count: "exact", head: true })
-    .eq("published", true);
+    const { count, error: countError } = await supabase
+      .from("blogs")
+      .select("id", { count: "exact", head: true })
+      .eq("published", true);
 
-  const { data, error } = await supabase
-    .from("blogs")
-    .select("id,title,slug,excerpt,image_url,created_at")
-    .eq("published", true)
-    .order("created_at", { ascending: false })
-    .range(from, to);
+    if (countError) {
+      return { posts: [] as BlogPost[], total: 0, error: countError.message as string };
+    }
 
-  if (error) {
-    return { posts: [] as BlogPost[], total: 0, error: error.message as string };
+    const { data, error } = await supabase
+      .from("blogs")
+      .select("id,title,slug,excerpt,image_url,created_at")
+      .eq("published", true)
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      return { posts: [] as BlogPost[], total: 0, error: error.message as string };
+    }
+
+    return { posts: (data as any) || [], total: count || 0, error: null as string | null };
+  } catch (e: any) {
+    return { posts: [] as BlogPost[], total: 0, error: e?.message || "Failed to load blog posts" };
   }
-
-  return { posts: (data as any) || [], total: count || 0, error: null as string | null };
 }
 
-type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>
+type SearchParams = { [key: string]: string | string[] | undefined };
 
 export default async function BlogPage(props: { searchParams?: SearchParams }) {
-  const searchParams = (await props.searchParams) || {};
+  const searchParams = props.searchParams || {};
   const pageParam = (searchParams?.page as string) || "1";
   const page = Math.max(1, parseInt(pageParam, 10) || 1);
   const { posts, total, error } = await loadData(page);
