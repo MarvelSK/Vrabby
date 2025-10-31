@@ -94,14 +94,8 @@ class Settings(BaseModel):
     projects_root: str = os.getenv("PROJECTS_ROOT", str(PROJECT_ROOT / "data" / "projects"))
     projects_root_host: str = os.getenv("PROJECTS_ROOT_HOST", os.getenv("PROJECTS_ROOT", str(PROJECT_ROOT / "data" / "projects")))
     
-    # Preview config
     preview_port_start: int = int(os.getenv("PREVIEW_PORT_START", "3100"))
     preview_port_end: int = int(os.getenv("PREVIEW_PORT_END", "3999"))
-    preview_max_concurrent: int = int(os.getenv("PREVIEW_MAX_CONCURRENT", "80"))
-    preview_idle_timeout_sec: int = int(os.getenv("PREVIEW_IDLE_TIMEOUT_SEC", "600"))
-    preview_reaper_interval_sec: int = int(os.getenv("PREVIEW_REAPER_INTERVAL_SEC", "30"))
-    preview_log_max_lines: int = int(os.getenv("PREVIEW_LOG_MAX_LINES", "1000"))
-    preview_node_max_old_space_mb: int = int(os.getenv("PREVIEW_NODE_MAX_OLD_SPACE_MB", "256"))
 
     # CORS configuration
     web_port_env: str = os.getenv("WEB_PORT", "3000")
@@ -125,9 +119,6 @@ class Settings(BaseModel):
     subscription_credits_per_period: int = int(os.getenv("SUBSCRIPTION_CREDITS_PER_PERIOD", "100"))
     purchase_credits_per_unit: int = int(os.getenv("PURCHASE_CREDITS_PER_UNIT", "500"))
     free_credits_on_signup: int = int(os.getenv("FREE_CREDITS_ON_SIGNUP", "20"))
-
-    # Billing markup (profit margin). Example: 1.4 => +40%
-    billing_markup: float = float(os.getenv("BILLING_MARKUP", "1.4"))
 
     # Token-based billing settings
     tokens_per_credit: int = int(os.getenv("TOKENS_PER_CREDIT", "1000"))

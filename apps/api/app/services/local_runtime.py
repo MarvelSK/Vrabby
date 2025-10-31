@@ -7,7 +7,6 @@ import socket
 import subprocess
 import threading
 import time
-from collections import deque
 from contextlib import closing
 from typing import Optional, Dict
 
@@ -15,21 +14,7 @@ from app.core.config import settings
 
 # Global process registry to track running Next.js processes
 _running_processes: Dict[str, subprocess.Popen] = {}
-# Bounded ring buffer for logs per project (memory-safe under scale)
-_process_logs: Dict[str, deque] = {}
-# Per-process metadata (port, timestamps)
-_process_meta: Dict[str, dict] = {}
-# Allocated port set to avoid races
-_allocated_ports: set[int] = set()
-# Global lock for thread/process safety
-_proc_lock = threading.RLock()
-# Reaper control
-_reaper_started = False
-
-# Capacity error used by API layer to map to 429
-class PreviewCapacityError(Exception):
-    pass
-
+_process_logs: Dict[str, list] = {}  # Store process logs for each project
 _npm_executable: Optional[str] = None
 
 
@@ -128,23 +113,13 @@ def _monitor_preview_errors(project_id: str, process: subprocess.Popen):
         recent_errors[error_id] = now
         return True
 
-    # Debounce for success notifications to reduce WS noise
-    last_success_sent = 0.0
-    def should_send_success():
-        nonlocal last_success_sent
-        now = time.time()
-        if (now - last_success_sent) < 0.25:  # 250ms debounce window
-            return False
-        last_success_sent = now
-        return True
-
     def collect_error_context(line_text):
         """에러 관련 컨텍스트 수집"""
         nonlocal current_error, error_lines
 
-        # 프로젝트별 로그 저장 (전체 로그 수집용, 메모리 안전한 ring buffer)
+        # 프로젝트별 로그 저장 (전체 로그 수집용)
         if project_id not in _process_logs:
-            _process_logs[project_id] = deque(maxlen=settings.preview_log_max_lines)
+            _process_logs[project_id] = []
 
         # 중복 로그 제거 (같은 라인이 연속으로 오는 경우)
         stripped_line = line_text.strip()
@@ -152,20 +127,17 @@ def _monitor_preview_errors(project_id: str, process: subprocess.Popen):
             return
 
         # 마지막 로그와 같은 경우 무시 (중복 제거)
-        if len(_process_logs[project_id]) > 0 and _process_logs[project_id][-1] == stripped_line:
+        if _process_logs[project_id] and _process_logs[project_id][-1] == stripped_line:
             return
 
         _process_logs[project_id].append(stripped_line)
+        # 최대 1000라인까지만 저장
+        if len(_process_logs[project_id]) > 1000:
+            _process_logs[project_id] = _process_logs[project_id][-1000:]
 
         # 성공 패턴 감지 - 에러 상태 클리어
         for pattern in success_patterns:
             if pattern in line_text:
-                # Debounce frequent success notifications
-                if not should_send_success():
-                    # Still clear error state but skip WS noise
-                    current_error = None
-                    error_lines = []
-                    return
                 # 성공 상태 전송
                 success_message = {
                     "type": "preview_success",
@@ -282,95 +254,11 @@ def _is_port_listening(port: int, host: str = "127.0.0.1") -> bool:
 
 
 def find_free_preview_port() -> int:
-    """Find a free port in the preview range with allocation guard.
-    Note: prefer allocate_preview_port() to reserve the port atomically.
-    """
-    with _proc_lock:
-        for port in range(settings.preview_port_start, settings.preview_port_end + 1):
-            if port in _allocated_ports:
-                continue
-            if _is_port_free(port):
-                return port
+    """Find a free port in the preview range"""
+    for port in range(settings.preview_port_start, settings.preview_port_end + 1):
+        if _is_port_free(port):
+            return port
     raise RuntimeError("No free preview port available")
-
-
-def allocate_preview_port() -> int:
-    """Atomically allocate a free port and mark it reserved until release."""
-    with _proc_lock:
-        for port in range(settings.preview_port_start, settings.preview_port_end + 1):
-            if port in _allocated_ports:
-                continue
-            if _is_port_free(port):
-                _allocated_ports.add(port)
-                return port
-    raise RuntimeError("No free preview port available")
-
-
-def _release_port_for_project(project_id: str) -> None:
-    """Release reserved port for a given project if known."""
-    with _proc_lock:
-        meta = _process_meta.get(project_id)
-        if meta and (port := meta.get("port")) in _allocated_ports:
-            _allocated_ports.discard(port)
-
-
-def _mark_process_metadata(project_id: str, port: int) -> None:
-    """Set or update per-process metadata."""
-    with _proc_lock:
-        _process_meta[project_id] = {
-            "port": port,
-            "started_at": time.time(),
-            "last_seen": time.time(),
-        }
-
-
-def touch_preview_activity(project_id: str) -> None:
-    """Mark a preview as recently used to prevent idle reaping."""
-    with _proc_lock:
-        if project_id in _process_meta:
-            _process_meta[project_id]["last_seen"] = time.time()
-
-
-def _ensure_reaper_started() -> None:
-    global _reaper_started
-    with _proc_lock:
-        if _reaper_started:
-            return
-        _reaper_started = True
-
-    def _reaper_loop():
-        interval = max(5, int(settings.preview_reaper_interval_sec))
-        idle_timeout = max(30, int(settings.preview_idle_timeout_sec))
-        while True:
-            try:
-                now = time.time()
-                to_stop: list[str] = []
-                # Identify idle or dead processes under lock
-                with _proc_lock:
-                    for pid, proc in list(_running_processes.items()):
-                        if proc is None:
-                            to_stop.append(pid)
-                            continue
-                        if proc.poll() is not None:
-                            # Already exited; schedule cleanup
-                            to_stop.append(pid)
-                            continue
-                        meta = _process_meta.get(pid) or {}
-                        last_seen = meta.get("last_seen", now)
-                        if (now - last_seen) > idle_timeout:
-                            to_stop.append(pid)
-                # Stop outside lock to avoid deadlocks
-                for pid in to_stop:
-                    try:
-                        stop_preview_process(pid)
-                    except Exception as e:
-                        print(f"[PreviewReaper] Failed to stop {pid}: {e}")
-            except Exception as e:
-                print(f"[PreviewReaper] Loop error: {e}")
-            time.sleep(interval)
-
-    t = threading.Thread(target=_reaper_loop, daemon=True)
-    t.start()
 
 
 def _should_install_dependencies(repo_path: str) -> bool:
@@ -446,12 +334,7 @@ def _save_install_hash(repo_path: str) -> None:
 
 def start_preview_process(project_id: str, repo_path: str, port: Optional[int] = None) -> tuple[str, int]:
     """
-    Start a Next.js development server using subprocess in a concurrency-safe way.
-
-    - Respects global max concurrent previews
-    - Atomically allocates/reuses a port
-    - Uses bounded in-memory logs
-    - Starts an idle reaper if not running
+    Start a Next.js development server using subprocess
     
     Args:
         project_id: Unique project identifier
@@ -461,29 +344,9 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
     Returns:
         Tuple of (process_name, port)
     """
-    # Debounce: if already running, return existing info
-    with _proc_lock:
-        existing = _running_processes.get(project_id)
-        if existing and existing.poll() is None:
-            meta = _process_meta.get(project_id, {})
-            # update last seen
-            meta["last_seen"] = time.time()
-            _process_meta[project_id] = meta
-            process_name = f"next-dev-{project_id}"
-            return process_name, meta.get("port") or settings.preview_port_start
-
-        # Enforce capacity
-        active = sum(1 for p in _running_processes.values() if p and p.poll() is None)
-        if active >= settings.preview_max_concurrent:
-            raise PreviewCapacityError(f"Max concurrent previews reached: {settings.preview_max_concurrent}")
-
-    # Ensure reaper is running
-    _ensure_reaper_started()
-
-    # Stop existing process if any (outside lock to avoid blocking)
+    # Stop existing process if any
     stop_preview_process(project_id)
 
-    # Remove stale Next.js dev lock
     lock_path = os.path.join(repo_path, ".next", "dev", "lock")
     if os.path.exists(lock_path):
         try:
@@ -492,27 +355,13 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
         except Exception as e:
             print(f"[PreviewFix] Warning: failed to remove stale lock file: {e}")
 
-    # Clear previous logs for this project (init ring buffer on first write)
+    # Clear previous logs for this project
     if project_id in _process_logs:
-        _process_logs[project_id].clear()
+        _process_logs[project_id] = []
         print(f"[PreviewError] Cleared previous logs for {project_id}")
 
-    # Assign port (reserve atomically); respect requested port if free
-    reserved_port: Optional[int] = None
-    try:
-        if port is not None:
-            # try reserve requested port
-            with _proc_lock:
-                if port not in _allocated_ports and _is_port_free(port):
-                    _allocated_ports.add(port)
-                    reserved_port = port
-        if reserved_port is None:
-            reserved_port = allocate_preview_port()
-    except Exception:
-        raise
-
-    # Use the reserved port
-    port = reserved_port
+    # Assign port
+    port = port or find_free_preview_port()
     process_name = f"next-dev-{project_id}"
 
     # Basic validation of repository path
@@ -526,20 +375,10 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
 
     # Install dependencies and start dev server
     env = os.environ.copy()
-    # Shared SWC cache across all projects for faster cold starts
-    swc_cache_dir = os.path.join(os.path.dirname(settings.projects_root), "swc-cache")
-    try:
-        os.makedirs(swc_cache_dir, exist_ok=True)
-    except Exception:
-        pass
     env.update({
         "NODE_ENV": "development",
         "NEXT_TELEMETRY_DISABLED": "1",
-        "NEXT_DISABLE_SOURCEMAP": "1",  # speed up dev builds
-        "SWC_CACHE_DIR": swc_cache_dir,
-        "NPM_CONFIG_UPDATE_NOTIFIER": "false",
-        # Constrain memory per preview process for higher concurrency
-        "NODE_OPTIONS": f"--max-old-space-size={settings.preview_node_max_old_space_mb}"
+        "NPM_CONFIG_UPDATE_NOTIFIER": "false"
     })
 
     try:
@@ -572,13 +411,8 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
         # Only install dependencies if needed
         if _should_install_dependencies(repo_path):
             print(f"Installing dependencies for project {project_id} with pnpm...")
-            # Use offline-first install, freeze lockfile only if it exists
-            pnpm_lock = os.path.join(repo_path, "pnpm-lock.yaml")
-            install_cmd = [npm_cmd, "install", "--prefer-offline"]
-            if os.path.exists(pnpm_lock):
-                install_cmd.append("--frozen-lockfile")
             install_result = subprocess.run(
-                install_cmd,
+                [npm_cmd, "install"],
                 cwd=repo_path,
                 env=env,
                 capture_output=True,
@@ -614,9 +448,9 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
         node_cmd = shutil.which("node.exe") or shutil.which("node") or "node"
         next_bin = os.path.join(repo_path, "node_modules", "next", "dist", "bin", "next")
         if os.path.exists(next_bin) and node_cmd:
-            cmd = [node_cmd, next_bin, "dev", "--turbo", "-p", str(port), "--hostname", host]
+            cmd = [node_cmd, next_bin, "dev", "-p", str(port), "--hostname", host]
         else:
-            cmd = [npm_cmd, "exec", "next", "dev", "--turbo", "-p", str(port), "--hostname", host]
+            cmd = [npm_cmd, "exec", "next", "dev", "-p", str(port), "--hostname", host]
         process = subprocess.Popen(
             cmd,
             **popen_kwargs
@@ -655,27 +489,15 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
         error_thread.start()
         print(f"[PreviewError] {project_id} 에러 모니터링 시작")
 
-        # Store process reference and metadata under lock
-        with _proc_lock:
-            _running_processes[project_id] = process
-            _mark_process_metadata(project_id, port)
+        # Store process reference
+        _running_processes[project_id] = process
 
         print(f"Next.js dev server started for {project_id} on port {port} (PID: {process.pid})")
         return process_name, port
 
     except subprocess.TimeoutExpired:
-        # Release reserved port on failure
-        if reserved_port is not None:
-            with _proc_lock:
-                _allocated_ports.discard(reserved_port)
-                _process_meta.pop(project_id, None)
         raise RuntimeError("pnpm install timed out after 2 minutes")
     except Exception as e:
-        # Release reserved port on failure
-        if reserved_port is not None:
-            with _proc_lock:
-                _allocated_ports.discard(reserved_port)
-                _process_meta.pop(project_id, None)
         raise RuntimeError(f"Failed to start preview process: {str(e)}")
 
 
@@ -687,9 +509,7 @@ def stop_preview_process(project_id: str, cleanup_cache: bool = False) -> None:
         project_id: Project identifier
         cleanup_cache: Whether to cleanup npm cache (optional)
     """
-    process = None
-    with _proc_lock:
-        process = _running_processes.get(project_id)
+    process = _running_processes.get(project_id)
 
     if process:
         try:
@@ -717,25 +537,12 @@ def stop_preview_process(project_id: str, cleanup_cache: bool = False) -> None:
             # Process already terminated
             pass
         finally:
-            # Remove from registry and release resources
-            with _proc_lock:
-                _running_processes.pop(project_id, None)
-                # Clear logs when process stops
-                if project_id in _process_logs:
-                    try:
-                        _process_logs[project_id].clear()
-                    except Exception:
-                        pass
-                    _process_logs.pop(project_id, None)
-                    print(f"[PreviewStop] Cleared logs for {project_id}")
-                _release_port_for_project(project_id)
-                _process_meta.pop(project_id, None)
-
-    else:
-        # Ensure resources are released even if process ref is missing
-        with _proc_lock:
-            _release_port_for_project(project_id)
-            _process_meta.pop(project_id, None)
+            # Remove from registry
+            del _running_processes[project_id]
+            # Clear logs when process stops
+            if project_id in _process_logs:
+                del _process_logs[project_id]
+                print(f"[PreviewStop] Cleared logs for {project_id}")
 
     # Optionally cleanup pnpm store
     if cleanup_cache:
@@ -766,35 +573,30 @@ def preview_status(project_id: str) -> str:
     Returns:
         "running", "stopped", or "not_found"
     """
-    with _proc_lock:
-        process = _running_processes.get(project_id)
+    process = _running_processes.get(project_id)
 
     if not process:
         return "not_found"
 
     # Check if process is still alive
     if process.poll() is None:
-        # touch activity and return
-        touch_preview_activity(project_id)
         return "running"
     else:
-        # Process has terminated, cleanup
-        stop_preview_process(project_id)
+        # Process has terminated, remove from registry
+        del _running_processes[project_id]
         return "stopped"
 
 
 def get_running_processes() -> Dict[str, int]:
     """Get all currently running processes with their PIDs"""
     active_processes = {}
-    with _proc_lock:
-        for project_id, process in list(_running_processes.items()):
-            if process and process.poll() is None:
-                active_processes[project_id] = process.pid
-            else:
-                # Clean up terminated processes and release resources
-                _running_processes.pop(project_id, None)
-                _release_port_for_project(project_id)
-                _process_meta.pop(project_id, None)
+    for project_id, process in list(_running_processes.items()):
+        if process.poll() is None:
+            active_processes[project_id] = process.pid
+        else:
+            # Clean up terminated processes
+            del _running_processes[project_id]
+
     return active_processes
 
 
@@ -878,11 +680,7 @@ def get_preview_logs(project_id: str, lines: int = 100) -> str:
         String containing the logs
     """
     # Return recent aggregated logs stored in memory
-    logs_deque = _process_logs.get(project_id)
-    if not logs_deque:
+    logs = _process_logs.get(project_id, [])
+    if not logs:
         return "No recent logs available"
-    # Touch activity when logs are requested (keeps active previews alive)
-    touch_preview_activity(project_id)
-    # Convert to list for safe slicing
-    logs_list = list(logs_deque)
-    return '\n'.join(logs_list[-max(1, int(lines)):])
+    return '\n'.join(logs[-lines:])

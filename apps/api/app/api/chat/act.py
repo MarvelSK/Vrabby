@@ -728,36 +728,6 @@ async def run_act(
         ui.error(f"Project {project_id} not found or access denied", "ACT API")
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Readiness guard: block prompts until CLI/agent initialized
-    try:
-        cli_preference_check = CLIType(body.cli_preference or project.preferred_cli)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid CLI type: {body.cli_preference}")
-    try:
-        cli_manager_chk = UnifiedCLIManager(
-            project_id=project_id,
-            project_path=project.repo_path or "",
-            session_id="status_check",
-            conversation_id="status_check",
-            db=db,
-        )
-        status_chk = await cli_manager_chk.check_cli_status(cli_preference_check, project.selected_model)
-        if not (status_chk.get("available") and status_chk.get("configured")):
-            raise HTTPException(
-                status_code=425,
-                detail="Selected CLI/agent is not initialized yet. Please wait a moment and try again.",
-                headers={"Retry-After": "10"},
-            )
-    except HTTPException:
-        raise
-    except Exception as e:
-        ui.warning(f"CLI status check failed: {e}", "ACT API")
-        raise HTTPException(
-            status_code=425,
-            detail="CLI/agent is not ready yet. Please wait a moment and try again.",
-            headers={"Retry-After": "10"},
-        )
-
     # Credits enforcement: token-based debit (approximate by instruction length)
     try:
         ensure_user_account(db, current_user["id"])  # ensure exists
@@ -958,36 +928,6 @@ async def run_chat(
     if not project or project.owner_id != current_user["id"]:
         ui.error(f"Project {project_id} not found or access denied", "CHAT API")
         raise HTTPException(status_code=404, detail="Project not found")
-
-    # Readiness guard: block prompts until CLI/agent initialized
-    try:
-        cli_preference_check = CLIType(body.cli_preference or project.preferred_cli)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid CLI type: {body.cli_preference}")
-    try:
-        cli_manager_chk = UnifiedCLIManager(
-            project_id=project_id,
-            project_path=project.repo_path or "",
-            session_id="status_check",
-            conversation_id="status_check",
-            db=db,
-        )
-        status_chk = await cli_manager_chk.check_cli_status(cli_preference_check, project.selected_model)
-        if not (status_chk.get("available") and status_chk.get("configured")):
-            raise HTTPException(
-                status_code=425,
-                detail="Selected CLI/agent is not initialized yet. Please wait a moment and try again.",
-                headers={"Retry-After": "10"},
-            )
-    except HTTPException:
-        raise
-    except Exception as e:
-        ui.warning(f"CLI status check failed: {e}", "CHAT API")
-        raise HTTPException(
-            status_code=425,
-            detail="CLI/agent is not ready yet. Please wait a moment and try again.",
-            headers={"Retry-After": "10"},
-        )
 
     # Credits enforcement: token-based debit (approximate by instruction length)
     try:

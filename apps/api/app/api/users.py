@@ -22,7 +22,7 @@ class UserProfileOut(BaseModel):
     last_login_at: Optional[datetime] = None
     last_active_at: Optional[datetime] = None
     plan: Optional[str] = None
-    credit_balance: Optional[float] = None
+    credit_balance: Optional[int] = None
 
     class Config:
         from_attributes = True

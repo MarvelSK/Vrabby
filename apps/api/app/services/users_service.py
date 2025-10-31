@@ -1,21 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Optional, Dict
-import threading
+from datetime import datetime
+from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user_profiles import UserProfile
 from app.repositories.users_repository import UsersRepository
 from app.repositories.billing_repository import BillingRepository
-
-# In-memory throttle map: owner_id -> last write timestamp (UTC)
-# Protect with a lock for multi-threaded ASGI workers
-_last_active_write_at: Dict[str, datetime] = {}
-_last_active_lock = threading.RLock()
-_HEARTBEAT_WRITE_MIN_INTERVAL = timedelta(seconds=60)
 
 
 @dataclass
@@ -29,7 +22,7 @@ class UserProfileDTO:
     last_login_at: Optional[datetime] = None
     last_active_at: Optional[datetime] = None
     plan: Optional[str] = None
-    credit_balance: Optional[float] = None
+    credit_balance: Optional[int] = None
 
 
 class UsersService:
@@ -118,40 +111,19 @@ class UsersService:
     ) -> None:
         now = datetime.utcnow()
         profile = await self.get_or_create_profile(owner_id)
-
-        # Determine if profile metadata changes are provided and actually change values
-        meta_changed = False
-        if email is not None and email != profile.email:
+        # snapshot metadata
+        if email is not None:
             profile.email = email
-            meta_changed = True
-        if name is not None and name != profile.name:
+        if name is not None:
             profile.name = name
-            meta_changed = True
-        if avatar_url is not None and avatar_url != profile.avatar_url:
+        if avatar_url is not None:
             profile.avatar_url = avatar_url
-            meta_changed = True
-
-        # Debounce frequent heartbeat events to reduce DB writes
-        # Always write on login events or when metadata changed
-        should_throttle = event != "login" and not meta_changed
-        if should_throttle:
-            with _last_active_lock:
-                last_write = _last_active_write_at.get(owner_id)
-                if last_write is not None and (now - last_write) < _HEARTBEAT_WRITE_MIN_INTERVAL:
-                    # Skip DB write; treat as acknowledged heartbeat
-                    return
-
-        # Apply timestamp updates
+        # update timestamps by event
         if event == "login":
             profile.last_login_at = now
             profile.last_active_at = now
         else:
             profile.last_active_at = now
         profile.updated_at = now
-
         await self.users_repo.save(profile)
         await self.db.commit()
-
-        # Update throttle map after successful commit
-        with _last_active_lock:
-            _last_active_write_at[owner_id] = now

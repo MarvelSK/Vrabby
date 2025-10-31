@@ -46,7 +46,7 @@ def list_users(db: Session = Depends(get_db), current_user: CurrentUser = Depend
                 "owner_id": r.owner_id,
                 "plan": r.plan,
                 "subscription_status": r.subscription_status,
-                "credit_balance": float(getattr(r, "credit_balance", 0.0) or 0.0),
+                "credit_balance": r.credit_balance,
                 "updated_at": r.updated_at.isoformat() if r.updated_at else None,
             }
             for r in rows
@@ -56,8 +56,8 @@ def list_users(db: Session = Depends(get_db), current_user: CurrentUser = Depend
 
 
 class AdjustCreditsBody(BaseModel):
-    delta: Optional[float] = None
-    set_to: Optional[float] = None
+    delta: Optional[int] = None
+    set_to: Optional[int] = None
 
 
 @router.post("/users/{owner_id}/credits")
@@ -71,12 +71,12 @@ def admin_adjust_credits(owner_id: str, body: AdjustCreditsBody, db: Session = D
         acct = db.query(UserAccount).filter(UserAccount.owner_id == owner_id).first()
         if not acct:
             raise HTTPException(status_code=404, detail="User account not found")
-        target = float(body.set_to)
-        delta = target - float(acct.credit_balance or 0.0)
+        target = int(body.set_to)
+        delta = target - int(acct.credit_balance or 0)
     else:
-        delta = float(body.delta or 0.0)
+        delta = int(body.delta or 0)
     new_balance = adjust_credits(db, owner_id, delta, "grant", "Admin adjustment")
-    return {"owner_id": owner_id, "credit_balance": float(new_balance)}
+    return {"owner_id": owner_id, "credit_balance": new_balance}
 
 
 class SetPlanBody(BaseModel):

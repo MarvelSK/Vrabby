@@ -71,6 +71,7 @@ class ClaudeCodeCLI(BaseCLI):
                 "models": self.get_supported_models(),
                 "default_models": [
                     "claude-sonnet-4-5-20250929",
+                    "claude-opus-4-1-20250805",
                 ],
             }
         except Exception as e:
@@ -651,78 +652,27 @@ class ClaudeCodeCLI(BaseCLI):
                 await log_callback(f"Claude SDK Exception: {str(e)}")
             raise
 
-    def _parse_session_key(self, key: str) -> tuple[str, str | None, str | None]:
-        """Extract project_id, agent_key, model from a composite session key.
-        The adapter uses keys like "<project_id>::<agent_key>::<model>". If not present,
-        returns (key, None, None).
-        """
-        if "::" not in key:
-            return key, None, None
-        parts = key.split("::", 2)
-        project_id = parts[0]
-        agent_key = parts[1] if len(parts) > 1 else None
-        model = parts[2] if len(parts) > 2 else None
-        return project_id, agent_key, model
-
-    async def get_session_id(self, project_key: str) -> Optional[str]:
-        """Get current session ID for project from persistent storage (Project.active_claude_session_id),
-        falling back to in-memory mapping.
-        """
-        # project_key may be a composite key (project_id::agent::model). Persist only by project_id for now.
-        pid, _agent, _model = self._parse_session_key(project_key)
-        # 1) Try in-memory first (fast path)
-        sid = self.session_mapping.get(project_key)
-        if sid:
-            return sid
-        # 2) Load from DB Project.active_claude_session_id
+    async def get_session_id(self, project_id: str) -> Optional[str]:
+        """Get current session ID for project from database"""
         try:
-            from app.db.session import SessionLocal
-            from app.models.projects import Project as ProjectModel
-            db = SessionLocal()
-            try:
-                proj = db.query(ProjectModel).filter(ProjectModel.id == pid).first()
-                if proj and getattr(proj, "active_claude_session_id", None):
-                    sid = proj.active_claude_session_id  # type: ignore[attr-defined]
-                    # Cache under composite key to maximize reuse
-                    self.session_mapping[project_key] = sid
-                    return sid
-            finally:
-                db.close()
+            # Try to get from database if available (we'll need to pass db session)
+            return self.session_mapping.get(project_id)
         except Exception as e:
-            ui.warning(f"Failed to read session ID from DB for {pid}: {e}", "Claude SDK")
-        # 3) Fallback: None
-        return None
+            ui.warning(f"Failed to get session ID from DB: {e}", "Claude SDK")
+            return self.session_mapping.get(project_id)
 
-    async def set_session_id(self, project_key: str, session_id: str) -> None:
-        """Set session ID for project in persistent storage and memory.
-        Stores into Project.active_claude_session_id to survive restarts.
-        """
-        pid, _agent, model = self._parse_session_key(project_key)
-        # Always cache in memory
-        self.session_mapping[project_key] = session_id
-        # Remember last session meta for reuse decisions
+    async def set_session_id(self, project_id: str, session_id: str) -> None:
+        """Set session ID for project in database and memory"""
         try:
-            self._last_session_meta[project_key] = {
-                "model": model,
-                "updated_at": datetime.utcnow().isoformat(),
-            }
-        except Exception:
-            pass
-        # Persist on Project for durability
-        try:
-            from app.db.session import SessionLocal
-            from app.models.projects import Project as ProjectModel
-            db = SessionLocal()
-            try:
-                proj = db.query(ProjectModel).filter(ProjectModel.id == pid).first()
-                if proj is not None:
-                    setattr(proj, "active_claude_session_id", session_id)
-                    db.commit()
-                    ui.debug(f"Persisted Claude session for project {pid}", "Claude SDK")
-            finally:
-                db.close()
+            # Store in memory as fallback
+            self.session_mapping[project_id] = session_id
+            ui.debug(
+                f"Session ID stored for project {project_id}", "Claude SDK"
+            )
         except Exception as e:
-            ui.warning(f"Failed to persist session ID for {pid}: {e}", "Claude SDK")
+            ui.warning(f"Failed to save session ID: {e}", "Claude SDK")
+            # Fallback to memory storage
+            self.session_mapping[project_id] = session_id
 
 
 __all__ = ["ClaudeCodeCLI"]

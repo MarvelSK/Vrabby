@@ -28,18 +28,9 @@ def _to_async_url(url: str) -> str:
 ASYNC_DATABASE_URL: str = _to_async_url(settings.database_url)
 
 # Create async engine/session factory
-# PgBouncer (transaction/statement mode) breaks server-side prepared statements.
-# Disable asyncpg prepared statement cache to avoid InvalidSQLStatementNameError.
 async_engine: AsyncEngine = create_async_engine(
     ASYNC_DATABASE_URL,
     pool_pre_ping=True,
-    connect_args={
-        # SQLAlchemy asyncpg dialect expects this name
-        "prepared_statement_cache_size": 0,
-        # Also pass through the native asyncpg argument name for completeness
-        # (ignored by SQLAlchemy if not recognized, harmless otherwise)
-        "statement_cache_size": 0,
-    },
 )
 
 AsyncSessionLocal = async_sessionmaker(
