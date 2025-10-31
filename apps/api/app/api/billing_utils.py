@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 
 from app.core.config import settings
 from app.models.billing import UserAccount, CreditTransaction
@@ -18,9 +19,10 @@ def ensure_user_account(db: Session, owner_id: str) -> UserAccount:
     acct = db.query(UserAccount).filter(UserAccount.owner_id == owner_id).first()
     if acct is None:
         # Create account with FREE plan and starter credits
+        start_credits = Decimal(settings.free_credits_on_signup or 0)
         acct = UserAccount(
             owner_id=owner_id,
-            credit_balance=settings.free_credits_on_signup,
+            credit_balance=float(start_credits),
             plan="free",
             subscription_status="none",
         )
@@ -29,7 +31,7 @@ def ensure_user_account(db: Session, owner_id: str) -> UserAccount:
         db.add(CreditTransaction(
             id=str(uuid.uuid4()),
             owner_id=owner_id,
-            amount=settings.free_credits_on_signup,
+            amount=float(start_credits),
             tx_type="grant",
             description="Free credits on signup",
             created_at=datetime.utcnow()
@@ -59,7 +61,7 @@ def ensure_monthly_free_topup(db: Session, acct: UserAccount) -> None:
         if _is_subscription_active(acct):
             return
 
-        target = int(settings.free_credits_on_signup)
+        target = Decimal(settings.free_credits_on_signup or 0)
         if target <= 0:
             return
 
@@ -79,16 +81,17 @@ def ensure_monthly_free_topup(db: Session, acct: UserAccount) -> None:
         if existing:
             return
 
-        current = int(acct.credit_balance or 0)
-        delta = max(0, target - current)
+        current = Decimal(acct.credit_balance or 0)
+        delta = max(Decimal(0), target - current)
         if delta <= 0:
             return
 
-        acct.credit_balance = current + delta
+        new_balance = (current + delta).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+        acct.credit_balance = float(new_balance)
         db.add(CreditTransaction(
             id=str(uuid.uuid4()),
             owner_id=acct.owner_id,
-            amount=delta,
+            amount=float(delta.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)),
             tx_type="grant",
             description=FREE_RENEWAL_DESC,
             created_at=datetime.utcnow()
@@ -100,22 +103,28 @@ def ensure_monthly_free_topup(db: Session, acct: UserAccount) -> None:
         db.rollback()
 
 
-def get_balance(db: Session, owner_id: str) -> int:
+def get_balance(db: Session, owner_id: str) -> float:
     acct = ensure_user_account(db, owner_id)
     # Best-effort monthly top-up check (ensure_user_account already handles it)
-    return int(acct.credit_balance or 0)
+    try:
+        return float(acct.credit_balance or 0.0)
+    except Exception:
+        return 0.0
 
 
-def adjust_credits(db: Session, owner_id: str, delta: int, tx_type: str, description: str | None = None) -> int:
+def adjust_credits(db: Session, owner_id: str, delta: float, tx_type: str, description: str | None = None) -> float:
     acct = ensure_user_account(db, owner_id)
-    new_balance = (acct.credit_balance or 0) + int(delta)
+    current = Decimal(acct.credit_balance or 0)
+    change = Decimal(delta)
+    new_balance = current + change
     if new_balance < 0:
         raise ValueError("Insufficient credits")
-    acct.credit_balance = new_balance
+    new_balance_q = new_balance.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+    acct.credit_balance = float(new_balance_q)
     db.add(CreditTransaction(
         id=str(uuid.uuid4()),
         owner_id=owner_id,
-        amount=delta,
+        amount=float(change.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)),
         tx_type=tx_type,
         description=description,
         created_at=datetime.utcnow()
@@ -123,3 +132,44 @@ def adjust_credits(db: Session, owner_id: str, delta: int, tx_type: str, descrip
     db.commit()
     db.refresh(acct)
     return acct.credit_balance
+
+
+# New: calculate and charge based on token usage with markup
+# Returns the charged amount (credits) after markup
+# PRICES are per-token internal costs denominated in credits
+# Example mapping; extend as needed
+PRICES_TABLE = {
+    "claude-3.5-sonnet": {"input": Decimal("0.003") / Decimal(1000), "output": Decimal("0.015") / Decimal(1000)},
+    "gpt-4o": {"input": Decimal("0.005") / Decimal(1000), "output": Decimal("0.015") / Decimal(1000)},
+}
+
+
+def charge_for_cost(db: Session, owner_id: str, internal_cost_credits: float, description: str | None = None) -> float:
+    """Charge a user for an internal cost measured in credits, applying the configured markup.
+
+    Returns the charged user-facing amount (credits) after markup and rounding.
+    """
+    base = Decimal(internal_cost_credits)
+    if base <= 0:
+        return 0.0
+    markup = Decimal(str(getattr(settings, "billing_markup", 1.4) or 1.4))
+    total = (base * markup).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+    adjust_credits(db, owner_id, -float(total), "usage", description or "Usage charge")
+    return float(total)
+
+def charge_for_tokens(db: Session, owner_id: str, model: str, input_tokens: int, output_tokens: int) -> float:
+    if model not in PRICES_TABLE:
+        raise ValueError("Unsupported model")
+    # Internal per-token rates
+    rates = PRICES_TABLE[model]
+    input_cost = Decimal(int(input_tokens)) * Decimal(rates["input"])  # type: ignore[index]
+    output_cost = Decimal(int(output_tokens)) * Decimal(rates["output"])  # type: ignore[index]
+    internal_cost = input_cost + output_cost
+
+    # Apply configurable markup
+    markup = Decimal(str(getattr(settings, "billing_markup", 1.4) or 1.4))
+    total_cost = (internal_cost * markup).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+
+    # Deduct from user balance
+    adjust_credits(db, owner_id, -float(total_cost), "usage", f"Prompt via {model}")
+    return float(total_cost)

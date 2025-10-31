@@ -13,7 +13,9 @@ from app.services.local_runtime import (
     stop_preview_process,
     preview_status,
     get_preview_logs,
-    get_all_preview_logs
+    get_all_preview_logs,
+    PreviewCapacityError,
+    touch_preview_activity,
 )
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -78,7 +80,15 @@ async def start_preview(
             )
 
     # Start preview
-    process_name, port = start_preview_process(project_id, repo_path, port=body.port)
+    try:
+        process_name, port = start_preview_process(project_id, repo_path, port=body.port)
+    except PreviewCapacityError as e:
+        # Too many previews running; advise client to retry later
+        raise HTTPException(status_code=429, detail=str(e), headers={"Retry-After": "30"})
+    except Exception as e:
+        # Surface startup issues as service unavailable with clear message
+        raise HTTPException(status_code=503, detail=f"Preview failed to start: {str(e)}")
+
     # Build URL using IPv4 loopback by default to avoid IPv6/localhost resolution issues on Windows
     host = os.getenv("PREVIEW_PUBLIC_HOST", os.getenv("PREVIEW_BIND", "127.0.0.1")).strip()
     if host in ("0.0.0.0", "::", "::1"):
@@ -91,14 +101,17 @@ async def start_preview(
         "process_name": process_name
     }
 
-    if not result["success"]:
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed to start preview"))
-
     # Update project status
     project.status = "preview_running"
     project.preview_url = result.get("url")
     project.preview_port = result.get("port")
     db.commit()
+
+    # Touch activity since we just started
+    try:
+        touch_preview_activity(project_id)
+    except Exception:
+        pass
 
     return PreviewStatusResponse(
         running=True,
@@ -219,7 +232,13 @@ async def restart_preview(
             )
 
     # Start preview
-    process_name, port = start_preview_process(project_id, repo_path, port=body.port)
+    try:
+        process_name, port = start_preview_process(project_id, repo_path, port=body.port)
+    except PreviewCapacityError as e:
+        raise HTTPException(status_code=429, detail=str(e), headers={"Retry-After": "30"})
+    except Exception as e:
+        # Present other startup failures as service unavailable
+        raise HTTPException(status_code=503, detail=f"Preview failed to restart: {str(e)}")
     api_host = os.getenv("API_PUBLIC_HOST", "127.0.0.1").strip() or "127.0.0.1"
     api_port = settings.api_port
     proxy_base = f"http://{api_host}:{api_port}/api/projects/{project_id}/preview/proxy"
@@ -238,26 +257,14 @@ async def restart_preview(
     project.preview_url = result.get("url")
     db.commit()
 
+    try:
+        touch_preview_activity(project_id)
+    except Exception:
+        pass
+
     return PreviewStatusResponse(
         running=True,
         port=result.get("port"),
         url=result.get("url"),
         process_id=result.get("process_id")
     )
-
-
-@router.get("/{project_id}/error-logs")
-async def get_all_error_logs(
-        project_id: str,
-        db: Session = Depends(get_db)
-):
-    """Get all error logs from the preview process"""
-
-    project = db.get(ProjectModel, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Get all stored logs for this project
-    all_logs = get_all_preview_logs(project_id)
-
-    return {"logs": all_logs, "project_id": project_id}

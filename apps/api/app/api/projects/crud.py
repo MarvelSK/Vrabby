@@ -252,11 +252,17 @@ async def projects_health():
 @router.get("/", response_model=List[Project])
 async def list_projects(
         db: Session = Depends(get_db),
-        current_user: CurrentUser = Depends(get_current_user)
+        current_user: CurrentUser = Depends(get_current_user),
+        limit: Optional[int] = None,
+        offset: int = 0
 ) -> List[Project]:
-    """List all projects for the current user with their status and last activity"""
+    """List all projects for the current user with their status and last activity.
 
-    # Get projects with their last message time using subquery
+    Optimized to avoid N+1 queries and to support optional pagination for large datasets.
+    If limit is not provided, all projects are returned (backward-compatible).
+    """
+
+    # Subquery: last message timestamp per project
     last_message_subquery = (
         db.query(
             Message.project_id,
@@ -266,34 +272,48 @@ async def list_projects(
         .subquery()
     )
 
-    # Query projects with last message time for this user only
-    projects_with_last_message = (
+    # Base query: projects owned by current user, joined with last message time
+    query = (
         db.query(ProjectModel, last_message_subquery.c.last_message_at)
         .outerjoin(
             last_message_subquery,
             ProjectModel.id == last_message_subquery.c.project_id
         )
-        .filter(ProjectModel.owner_id == current_user["id"])  # tenant isolation
+        .filter(ProjectModel.owner_id == current_user["id"])  # tenant isolation via indexed column
         .order_by(desc(ProjectModel.created_at))
-        .all()
     )
 
-    result: List[Project] = []
-    for project, last_message_at in projects_with_last_message:
-        # Get service connections for this project
-        services = {}
-        service_connections = db.query(ProjectServiceConnection).filter(
-            ProjectServiceConnection.project_id == project.id
-        ).all()
+    # Apply optional pagination (capped for safety)
+    if limit is not None:
+        safe_limit = max(1, min(int(limit), 200))
+        safe_offset = max(0, int(offset))
+        query = query.offset(safe_offset).limit(safe_limit)
 
-        for conn in service_connections:
-            services[conn.provider] = {
+    rows = query.all()
+
+    # Bulk load service connections for all returned projects (avoid N+1)
+    project_ids = [p.id for p, _ in rows]
+    services_by_project: dict[str, dict] = {}
+    if project_ids:
+        connections = (
+            db.query(ProjectServiceConnection)
+            .filter(ProjectServiceConnection.project_id.in_(project_ids))
+            .all()
+        )
+        for conn in connections:
+            proj_services = services_by_project.setdefault(conn.project_id, {})
+            proj_services[conn.provider] = {
                 "connected": True,
                 "status": conn.status
             }
 
-        # Ensure all service types are represented
-        for provider in ["github", "supabase", "vercel"]:
+    default_providers = ["github", "supabase", "vercel"]
+
+    result: List[Project] = []
+    for project, last_message_at in rows:
+        # Compose service map with defaults
+        services = dict(services_by_project.get(project.id, {}))
+        for provider in default_providers:
             if provider not in services:
                 services[provider] = {
                     "connected": False,

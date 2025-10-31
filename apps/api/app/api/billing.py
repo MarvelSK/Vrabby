@@ -38,7 +38,7 @@ def get_credits(db: Session = Depends(get_db), current_user: CurrentUser = Depen
 
     return {
         "owner_id": acct.owner_id,
-        "credit_balance": acct.credit_balance,
+        "credit_balance": float(acct.credit_balance or 0.0),
         "subscription_status": acct.subscription_status,
         "plan": acct.plan,
         "period_limit": settings.subscription_credits_per_period,
@@ -204,7 +204,7 @@ def list_transactions(limit: int = 50, db: Session = Depends(get_db), current_us
     return [
         {
             "id": r.id,
-            "amount": r.amount,
+            "amount": float(getattr(r, "amount", 0.0) or 0.0),
             "tx_type": r.tx_type,
             "description": r.description,
             "created_at": r.created_at.isoformat() if r.created_at else None,
