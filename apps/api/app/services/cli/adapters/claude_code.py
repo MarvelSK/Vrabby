@@ -140,26 +140,23 @@ class ClaudeCodeCLI(BaseCLI):
             "updated_at": datetime.utcnow().isoformat(),
         }
 
-        # Load system prompt (skip when reusing session)
-        if not reuse_session:
-            try:
-                from app.services.claude_act import get_system_prompt
+        # Load system prompt (always load to enforce identity/output policy)
+        try:
+            from app.services.claude_act import get_system_prompt
 
-                # Use full system-prompt only for initial project setup; otherwise use core+design
-                system_prompt = get_system_prompt(first_run=is_initial_prompt, sub_agent=sub_agent)
-                ui.debug(f"System prompt loaded: {len(system_prompt)} chars", "Claude SDK")
-                full_system_prompt = system_prompt
-                trimmed_system_prompt = system_prompt
-            except Exception as e:
-                ui.error(f"Failed to load system prompt: {e}", "Claude SDK")
-                full_system_prompt = (
-                    "You are Claude Code, an AI coding assistant specialized in building modern web applications."
-                )
-                trimmed_system_prompt = full_system_prompt
-        else:
-            # When reusing session, don't reload prompts or pass them to options
-            full_system_prompt = ""
-            trimmed_system_prompt = ""
+            # Use full system-prompt only for initial project setup; otherwise use core+design
+            system_prompt = get_system_prompt(first_run=is_initial_prompt, sub_agent=sub_agent)
+            ui.debug(f"System prompt loaded: {len(system_prompt)} chars", "Claude SDK")
+            full_system_prompt = system_prompt
+            trimmed_system_prompt = system_prompt
+        except Exception as e:
+            ui.error(f"Failed to load system prompt: {e}", "Claude SDK")
+            full_system_prompt = (
+                "You are Vrabby, an advanced AI coding assistant created by Marek Vrábel (MHost.sk). "
+                "Keep responses extremely concise and end with exactly one short, friendly sentence — "
+                "no change logs, commands, URLs, environment details, or technical stack lists."
+            )
+            trimmed_system_prompt = full_system_prompt
 
         # Enforce concise, frugal assistant style to reduce token usage
         concise_directive = (
@@ -179,6 +176,11 @@ class ClaudeCodeCLI(BaseCLI):
         except Exception:
             pass
 
+        # Short, append-only policy to enforce identity/output without large CLI args
+        compact_policy = (
+            "You are Vrabby. End with exactly one short, friendly sentence. "
+            "Do not include commands, URLs, ports, environment info, technical stack lists, or change logs."
+        )
 
         # Provide a tiny repo map instead of large directory listings for initial prompts
         if is_initial_prompt:
@@ -356,9 +358,8 @@ class ClaudeCodeCLI(BaseCLI):
             }
             if session_settings_path:
                 option_kwargs["settings"] = session_settings_path
-            elif not reuse_session:
-                option_kwargs["system_prompt"] = trimmed_system_prompt
-            # When reusing session, avoid passing system_prompt/settings to prevent re-init
+            # Pass a short append-only policy to enforce identity/output without long CLI args
+            option_kwargs["append_system_prompt"] = compact_policy
             options = ClaudeCodeOptions(**option_kwargs)
         else:
             # For non-initial prompts: include TodoWrite in allowed tools
@@ -395,9 +396,8 @@ class ClaudeCodeCLI(BaseCLI):
             }
             if session_settings_path:
                 option_kwargs["settings"] = session_settings_path
-            elif not reuse_session:
-                option_kwargs["system_prompt"] = trimmed_system_prompt
-            # When reusing session, avoid passing system_prompt/settings to prevent re-init
+            # Pass a short append-only policy to enforce identity/output without long CLI args
+            option_kwargs["append_system_prompt"] = compact_policy
             options = ClaudeCodeOptions(**option_kwargs)
 
         # Early resume if we already have a session id and plan to reuse

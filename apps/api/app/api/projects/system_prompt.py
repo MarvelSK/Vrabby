@@ -29,8 +29,8 @@ async def get_project_system_prompt(project_id: str, db: Session = Depends(get_d
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Load system prompt for the project
-    system_prompt = get_system_prompt(project_id)
+    # Load default composed system prompt (project-specific overrides not yet implemented)
+    system_prompt = get_system_prompt()
 
     return SystemPromptResponse(
         system_prompt=system_prompt,

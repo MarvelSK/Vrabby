@@ -70,11 +70,23 @@ def _compose_system_prompt(first_run: bool) -> str:
       • Subsequent runs (existing project): use only core + design prompts (no build section).
     Falls back to minimal prompt if none found.
     """
-    cache_key = f"first_run={first_run}"
+    # Include prompt file mtimes in cache key so updates take effect without restart
+    resolved = _find_prompt_variants()
+    try:
+        mtime_bits = []
+        for key, p in resolved.items():
+            try:
+                mtime_bits.append(f"{key}={int(p.stat().st_mtime_ns)}")
+            except Exception:
+                mtime_bits.append(f"{key}=0")
+        mtime_key = ":".join(sorted(mtime_bits))
+    except Exception:
+        mtime_key = ""
+    cache_key = f"first_run={first_run}|{mtime_key}"
     if cache_key in _PROMPT_CACHE:
         return _PROMPT_CACHE[cache_key]
 
-    resolved = _find_prompt_variants()
+    # resolved already computed above
 
     # 1) First run: prefer legacy single prompt for project bootstrapping
     if first_run:
@@ -224,13 +236,19 @@ async def generate_diff_with_logging(
         else get_system_prompt(first_run=is_first_run)
     )
 
+    # To avoid Windows command-line length issues, do not pass large system prompts directly.
+    # Instead, append a compact policy prompt that enforces Vrabby identity and output rules.
+    compact_policy = (
+        "You are Vrabby. Be concise. End with exactly one short, friendly sentence. "
+        "Do not include commands, URLs, ports, env details, or change logs."
+    )
     options = ClaudeCodeOptions(
         cwd=repo_path,
         allowed_tools=["Read", "Write", "Edit", "MultiEdit", "Bash", "Glob", "Grep", "LS"],
         permission_mode="acceptEdits",
-        system_prompt=effective_prompt,
         model=DEFAULT_MODEL,
         resume=resume_session_id,
+        append_system_prompt=compact_policy,
     )
 
     response_text = ""
