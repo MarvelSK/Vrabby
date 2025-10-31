@@ -5,14 +5,16 @@ Handles project initialization, scaffolding, and setup
 import json
 import os
 import shutil
+import asyncio
 from typing import Optional
 
-from app.core.config import settings
+from app.core.config import settings, PROJECT_ROOT
 from app.services.filesystem import (
     ensure_dir,
     scaffold_nextjs_minimal,
     init_git_repo,
-    write_env_file
+    write_env_file,
+    extract_template_zip,
 )
 
 
@@ -30,30 +32,34 @@ async def initialize_project(project_id: str, name: str) -> str:
 
     # Create project directory
     project_path = os.path.join(settings.projects_root, project_id, "repo")
-    ensure_dir(project_path)
+    await asyncio.to_thread(ensure_dir, project_path)
 
     # Create assets directory
     assets_path = os.path.join(settings.projects_root, project_id, "assets")
-    ensure_dir(assets_path)
+    await asyncio.to_thread(ensure_dir, assets_path)
 
     try:
-        # Scaffold NextJS project using create-next-app (includes automatic git init)
-        scaffold_nextjs_minimal(project_path)
+        # Prefer extracting a pre-baked template for speed; fallback to create-next-app
+        template_zip = os.path.join(str(PROJECT_ROOT), "data", "templates", "next_minimal.zip")
+        if os.path.exists(template_zip):
+            await asyncio.to_thread(extract_template_zip, template_zip, project_path)
+        else:
+            await asyncio.to_thread(scaffold_nextjs_minimal, project_path)
 
         # CRITICAL: Force create independent git repository for each project
         # create-next-app inherits parent .git when run inside existing repo
         # This ensures each project has its own isolated git history
-        init_git_repo(project_path)
+        await asyncio.to_thread(init_git_repo, project_path)
 
         # Create initial .env file
         env_content = f"NEXT_PUBLIC_PROJECT_ID={project_id}\nNEXT_PUBLIC_PROJECT_NAME={name}\n"
-        write_env_file(project_path, env_content)
+        await asyncio.to_thread(write_env_file, project_path, env_content)
 
         # Create metadata directory and initial metadata file
-        create_project_metadata(project_id, name)
+        await asyncio.to_thread(create_project_metadata, project_id, name)
 
         # Setup Claude Code configuration
-        setup_claude_config(project_path)
+        await asyncio.to_thread(setup_claude_config, project_path)
 
         return project_path
 
@@ -82,9 +88,9 @@ async def cleanup_project(project_id: str) -> bool:
 
     project_root = os.path.join(settings.projects_root, project_id)
 
-    # Nothing to do
+    # Nothing to do: if the directory doesn't exist, treat as already cleaned up (idempotent)
     if not os.path.exists(project_root):
-        return False
+        return True
 
     # 1) Ensure any running preview processes for this project are terminated
     try:
@@ -115,7 +121,8 @@ async def cleanup_project(project_id: str) -> bool:
     last_err = None
     while attempts < max_attempts:
         try:
-            shutil.rmtree(project_root, onerror=_onerror)
+            # run rmtree in a worker thread to avoid blocking the event loop
+            await asyncio.to_thread(shutil.rmtree, project_root, onerror=_onerror)
             return True
         except OSError as e:
             last_err = e

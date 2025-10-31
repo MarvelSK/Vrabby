@@ -124,5 +124,41 @@ def scaffold_nextjs_minimal(repo_path: str) -> None:
         )
 
 
+def extract_template_zip(zip_path: str, repo_path: str) -> None:
+    """Extract a template zip into repo_path.
+
+    - Works whether the zip contains files at the root or wrapped in a single top-level folder.
+    - Moves files into repo_path and flattens a single wrapping directory if present.
+    """
+    import zipfile
+    import tempfile
+
+    repo = Path(repo_path)
+    repo.mkdir(parents=True, exist_ok=True)
+
+    if not Path(zip_path).exists():
+        raise FileNotFoundError(f"Template zip not found: {zip_path}")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            zf.extractall(tmpdir)
+        tmp_path = Path(tmpdir)
+
+        # Determine source directory to move from
+        entries = [p for p in tmp_path.iterdir()]
+        if len(entries) == 1 and entries[0].is_dir():
+            src_dir = entries[0]
+        else:
+            src_dir = tmp_path
+
+        # If src_dir looks like a project folder (has package.json), use it; otherwise still move all
+        for item in src_dir.iterdir():
+            target = repo / item.name
+            if item.is_dir():
+                shutil.move(str(item), str(target))
+            else:
+                shutil.move(str(item), str(target))
+
+
 def write_env_file(project_dir: str, content: str) -> None:
     (Path(project_dir) / ".env").write_text(content)

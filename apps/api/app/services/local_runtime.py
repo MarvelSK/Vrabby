@@ -128,6 +128,16 @@ def _monitor_preview_errors(project_id: str, process: subprocess.Popen):
         recent_errors[error_id] = now
         return True
 
+    # Debounce for success notifications to reduce WS noise
+    last_success_sent = 0.0
+    def should_send_success():
+        nonlocal last_success_sent
+        now = time.time()
+        if (now - last_success_sent) < 0.25:  # 250ms debounce window
+            return False
+        last_success_sent = now
+        return True
+
     def collect_error_context(line_text):
         """에러 관련 컨텍스트 수집"""
         nonlocal current_error, error_lines
@@ -150,6 +160,12 @@ def _monitor_preview_errors(project_id: str, process: subprocess.Popen):
         # 성공 패턴 감지 - 에러 상태 클리어
         for pattern in success_patterns:
             if pattern in line_text:
+                # Debounce frequent success notifications
+                if not should_send_success():
+                    # Still clear error state but skip WS noise
+                    current_error = None
+                    error_lines = []
+                    return
                 # 성공 상태 전송
                 success_message = {
                     "type": "preview_success",
@@ -510,9 +526,17 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
 
     # Install dependencies and start dev server
     env = os.environ.copy()
+    # Shared SWC cache across all projects for faster cold starts
+    swc_cache_dir = os.path.join(os.path.dirname(settings.projects_root), "swc-cache")
+    try:
+        os.makedirs(swc_cache_dir, exist_ok=True)
+    except Exception:
+        pass
     env.update({
         "NODE_ENV": "development",
         "NEXT_TELEMETRY_DISABLED": "1",
+        "NEXT_DISABLE_SOURCEMAP": "1",  # speed up dev builds
+        "SWC_CACHE_DIR": swc_cache_dir,
         "NPM_CONFIG_UPDATE_NOTIFIER": "false",
         # Constrain memory per preview process for higher concurrency
         "NODE_OPTIONS": f"--max-old-space-size={settings.preview_node_max_old_space_mb}"
@@ -548,8 +572,13 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
         # Only install dependencies if needed
         if _should_install_dependencies(repo_path):
             print(f"Installing dependencies for project {project_id} with pnpm...")
+            # Use offline-first install, freeze lockfile only if it exists
+            pnpm_lock = os.path.join(repo_path, "pnpm-lock.yaml")
+            install_cmd = [npm_cmd, "install", "--prefer-offline"]
+            if os.path.exists(pnpm_lock):
+                install_cmd.append("--frozen-lockfile")
             install_result = subprocess.run(
-                [npm_cmd, "install"],
+                install_cmd,
                 cwd=repo_path,
                 env=env,
                 capture_output=True,
@@ -585,9 +614,9 @@ def start_preview_process(project_id: str, repo_path: str, port: Optional[int] =
         node_cmd = shutil.which("node.exe") or shutil.which("node") or "node"
         next_bin = os.path.join(repo_path, "node_modules", "next", "dist", "bin", "next")
         if os.path.exists(next_bin) and node_cmd:
-            cmd = [node_cmd, next_bin, "dev", "-p", str(port), "--hostname", host]
+            cmd = [node_cmd, next_bin, "dev", "--turbo", "-p", str(port), "--hostname", host]
         else:
-            cmd = [npm_cmd, "exec", "next", "dev", "-p", str(port), "--hostname", host]
+            cmd = [npm_cmd, "exec", "next", "dev", "--turbo", "-p", str(port), "--hostname", host]
         process = subprocess.Popen(
             cmd,
             **popen_kwargs
